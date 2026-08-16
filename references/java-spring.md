@@ -5,10 +5,17 @@ Load the API base and key from server configuration. Never return either through
 an actuator environment endpoint, template model, public JavaScript config, or
 error message.
 
+Before creating controller mappings, run `scripts/discover_site.py` with the
+same server environment. Generate the controller's route prefix from its
+authenticated `blogPath`; do not hard-code `/blogs` or maintain a separate
+operator-entered path. If a subsequent discovery differs from the compiled or
+configured prefix, fail the deployment check and rebuild/redeploy.
+
 ## Proxy mode
 
-Map `/blogs`, `/blogs/{slug}`, `/blogs/sitemap.xml`, and `/blogs/feed.xml`.
-Construct upstream paths from fixed templates and an encoded path segment. Set
+Map `<blogPath>`, `<blogPath>/{slug}`, `<blogPath>/sitemap.xml`, and
+`<blogPath>/feed.xml`. Construct upstream paths from fixed templates and an
+encoded path segment. Set
 `Authorization` to `Bearer ` plus the configured RankWin key on the outbound
 request; never forward the visitor's Authorization or cookies. Force
 `format=page` for HTML.

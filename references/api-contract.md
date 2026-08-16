@@ -11,6 +11,32 @@ also remain live.
 Never expose the bearer value to the browser. Customer public routes terminate
 the visitor request and make a separate server-to-server request to RankWin.
 
+## Authenticated site discovery
+
+Call `GET /articles?limit=1` before generating customer routes. Its top-level
+`site` object contains the authoritative `host` and `blogPath` selected in
+RankWin, even when the `articles` array is empty:
+
+```json
+{
+  "apiVersion": "cms.v1",
+  "site": {
+    "name": "Customer site",
+    "host": "customer.example",
+    "blogPath": "/resources/blog"
+  },
+  "articles": [],
+  "nextCursor": null
+}
+```
+
+Authenticate this request with the site delivery API key. The public site key
+in the API base identifies a candidate site; only a valid delivery key proves
+that the integration may read its configuration and content. Generate the
+customer index/detail/sitemap/feed routes from `site.blogPath`. Never accept a
+separate path entry or silently fall back to `/blogs`. A mismatch between the
+deployed route and authenticated `site.blogPath` is a failed integration.
+
 ## Endpoints
 
 | Request                                     | Response                                  |
@@ -74,5 +100,5 @@ nested node has a unique ID within the document.
 ## Security invariant
 
 An article ID is not globally readable. The same ID under another site base or
-with another site's key must fail. Cache records by site identity + article ID
-+ content version, never article ID alone.
+with another site's key must fail. Cache records by site identity, article ID,
+and content version, never article ID alone.

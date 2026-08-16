@@ -1,4 +1,4 @@
 interface:
   display_name: "RankWin CMS Site Integration"
   short_description: "Integrate RankWin CMS into any website"
-  default_prompt: "Use $rankwin-cms-site-integration to configure the server-only RankWin CMS API key, integrate this website, and verify the paid SEO-safe delivery contract end to end."
+  default_prompt: "Use $rankwin-cms-site-integration to authenticate with the server-only delivery key, discover RankWin's configured blog path, generate this website's matching routes, and verify SEO-safe delivery end to end."

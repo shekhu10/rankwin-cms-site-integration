@@ -1,13 +1,6 @@
 ---
 name: rankwin-cms-site-integration
-description: Integrate any customer website with the paid RankWin CMS pull API using a server-only delivery API key. Use when implementing or repairing crawlable blog index/detail routes, stable article and block synchronization, authenticated HTML proxying, sitemap/feed delivery, metadata, optional featured images and public media, caching, analytics, or end-to-end verification in Next.js, Java/Spring, another server framework, an edge worker, or a reverse proxy.
-metadata:
-  {
-    "clawdbot":
-      {
-        "requires": { "env": ["RANKWIN_CMS_API_BASE", "RANKWIN_CMS_API_KEY"] },
-      },
-  }
+description: Integrate any customer website with the paid RankWin CMS pull API using a server-only delivery API key and the authenticated site.blogPath selected in RankWin. Use when implementing or repairing crawlable blog index/detail routes, stable article and block synchronization, authenticated HTML proxying, sitemap/feed delivery, metadata, optional featured images and public media, caching, analytics, or end-to-end verification in Next.js, Java/Spring, another server framework, an edge worker, or a reverse proxy.
 ---
 
 # RankWin CMS Site Integration
@@ -19,18 +12,32 @@ initial HTTP response.
 
 ## First-run setup
 
-Before editing code, confirm all four inputs:
+Before editing code, complete this credential and discovery gate:
 
 1. In **RankWin → Settings → Integrations → RankWin CMS**, create or select the
    exact customer hostname and blog path.
-2. Copy its persistent API base into the customer server environment as
+2. Copy its persistent API base into the customer development environment as
    `RANKWIN_CMS_API_BASE`, for example
    `https://rankwin.co/api/cms/v1/sites/rwcms_...`.
 3. On the same site card, create a **production delivery API key**. This control
    is available only while the project has a paid publishing entitlement. Save
-   the one-time secret as `RANKWIN_CMS_API_KEY` in the customer server
-   environment.
-4. Choose authenticated RankWin-rendered HTML proxying or customer-rendered
+   the one-time secret as `RANKWIN_CMS_API_KEY` in the customer development
+   environment. If either variable is absent, stop and ask the customer to set
+   it in their local secret store or shell; never ask them to paste the key into
+   chat or source code.
+4. Authenticate and discover the authoritative site configuration before
+   choosing or creating routes. Resolve the directory containing this
+   `SKILL.md`, then run:
+
+   ```bash
+   python3 <skill-directory>/scripts/discover_site.py
+   ```
+
+   Read `host`, `blogPath`, and `customerBlogUrl` from the JSON output. Do not
+   ask the customer to retype the path and do not default to `/blogs`. Generate
+   every customer route from this exact `blogPath`.
+
+5. Choose authenticated RankWin-rendered HTML proxying or customer-rendered
    JSON. Both must run on the server.
 
 The skill repository is public; the API is not. Every upstream request needs:
@@ -53,8 +60,17 @@ visible on a hostname the customer already controls.
 
 Find the framework, runtime, existing routing, cache layer, sitemap generation,
 analytics owner, environment/deployment convention, and routes that could
-collide with the configured blog path. Do not edit RankWin or guess how the
-customer application deploys.
+collide with the discovered `site.blogPath`. Do not edit RankWin, guess the
+path, or guess how the customer application deploys. Treat the discovery output
+as the route-generation input for this run:
+
+- `<blogPath>` → the crawlable index;
+- `<blogPath>/[slug]` → article detail;
+- `<blogPath>/sitemap.xml` → sitemap;
+- `<blogPath>/feed.xml` → feed.
+
+For root mode (`blogPath === "/"`), use `/[slug]` only after preserving every
+existing product route and assigning non-conflicting sitemap/feed routes.
 
 Read the matching reference:
 
@@ -64,32 +80,38 @@ Read the matching reference:
 - exact fields, errors, authorization, caching, and identity:
   `references/api-contract.md`
 
-### 2. Validate credentials before implementation
+### 2. Validate credentials and path before implementation
 
-From a server shell, without displaying the key:
+Run discovery from a server shell without displaying the key:
 
 ```bash
 test -n "$RANKWIN_CMS_API_BASE" && test -n "$RANKWIN_CMS_API_KEY"
-curl --fail-with-body --silent --show-error \
-  --header "Authorization: Bearer $RANKWIN_CMS_API_KEY" \
-  "$RANKWIN_CMS_API_BASE/articles?limit=1"
+python3 <skill-directory>/scripts/discover_site.py
 ```
 
-Expected: HTTP 200 and `apiVersion: cms.v1`. HTTP 401 means the key is missing,
-malformed, revoked, scoped to another site, or the paid entitlement is inactive.
-Do not retry a 401. Ask an authorized RankWin project manager to create a
-replacement or restore the subscription; update the customer server, verify,
-then revoke the old key.
+The script reads both variables from the environment, sends the delivery key
+only in the Authorization header, and prints only non-secret site configuration.
+Expected: `apiVersion: cms.v1` plus the authenticated `site.host` and
+`site.blogPath`. HTTP 401 means the key is missing, malformed, revoked, scoped
+to another site, or the paid entitlement is inactive. Do not retry a 401. Ask
+an authorized RankWin project manager to create a replacement or restore the
+subscription; update the customer server, verify, then revoke the old key.
+
+Persist the discovered path as ordinary server configuration if the framework
+needs it, but never let a separate customer-entered value override it. If an
+existing route differs, migrate it to the discovered path or stop and report
+the collision. Changing the path later in RankWin requires rerunning this skill,
+regenerating affected routes, and redeploying the customer application.
 
 ### 3. Choose one SEO-safe delivery architecture
 
 Prefer **same-origin authenticated HTML proxying** when the customer accepts
 RankWin's markup. The customer server injects the bearer header and proxies:
 
-- blog index → `<api-base>/articles?format=page`
-- article route → `<api-base>/articles/<slug>?format=page`
-- sitemap → `<api-base>/sitemap.xml`
-- feed → `<api-base>/feed.xml`
+- `<site.blogPath>` → `<api-base>/articles?format=page`
+- `<site.blogPath>/[slug]` → `<api-base>/articles/<slug>?format=page`
+- `<site.blogPath>/sitemap.xml` → `<api-base>/sitemap.xml`
+- `<site.blogPath>/feed.xml` → `<api-base>/feed.xml`
 
 A bare external rewrite is invalid because it cannot safely attach a secret
 header. Use a Route Handler, server controller, edge/server worker secret, or
@@ -181,13 +203,14 @@ Run repository and deployment checks, then run from this skill directory:
 
 ```bash
 python3 scripts/verify_integration.py \
-  --api-base "$RANKWIN_CMS_API_BASE" \
-  --customer-blog-url "https://customer.example/blogs"
+  --api-base "$RANKWIN_CMS_API_BASE"
 ```
 
 The verifier reads `RANKWIN_CMS_API_KEY` from the environment and never accepts
-it as a command-line argument. Repeat fetch → inspect → fix → deploy → fetch
-until all checks pass. Verify:
+it as a command-line argument. It derives the customer URL from authenticated
+`site.host` + `site.blogPath`; an optional `--customer-blog-url` must match that
+exact URL. Repeat fetch → inspect → fix → deploy → fetch until all checks pass.
+Verify:
 
 1. no/malformed key receives 401, while the configured key receives 200;
 2. list JSON is `cms.v1` and every summary has `id`, slug, metadata, the
@@ -207,6 +230,8 @@ until all checks pass. Verify:
     initial customer index card, article HTML, Open Graph/Twitter metadata, and
     Article JSON-LD with meaningful alt text; when absent, no broken or empty
     image container is rendered.
+13. the deployed index path exactly equals authenticated `site.blogPath`; no
+    hard-coded `/blogs` fallback or second customer-entered path is accepted.
 
 Do not declare completion from an upstream API call alone. The canonical
 customer URL and its initial HTML are the acceptance boundary.

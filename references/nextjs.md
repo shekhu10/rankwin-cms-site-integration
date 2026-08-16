@@ -4,6 +4,13 @@ External `next.config` rewrites are not sufficient because they cannot safely
 inject a delivery secret. Use App Router Route Handlers/server components (or
 the equivalent Pages Router API routes and `getStaticProps`).
 
+Run `scripts/discover_site.py` before editing routes. Convert the authenticated
+`blogPath` into the matching App Router directory (for example `/resources/blog`
+becomes `app/resources/blog`). Do not default to `app/blogs` and do not ask the
+operator to enter the path again. Filesystem routes are build artifacts: if
+RankWin later returns a different path, fail verification, move/regenerate the
+route tree, and redeploy.
+
 ## Server-only client
 
 ```ts
@@ -30,11 +37,12 @@ Never import this module from a Client Component and never name the key with a
 
 ## Authenticated HTML proxy mode
 
-Create fixed handlers for `/blogs`, `/blogs/[slug]`, the sitemap, and feed. Call
-`rankWinFetch` with `?format=page` for HTML. Validate/encode the slug, preserve
-status and safe content/ETag headers, and stream or return the body. Do not
-forward browser cookies/Authorization. Upstream 401 is a server-configuration or
-subscription failure, not a not-found article.
+Create fixed handlers for `<site.blogPath>`, `<site.blogPath>/[slug]`, the
+sitemap, and feed. Call `rankWinFetch` with `?format=page` for HTML.
+Validate/encode the slug, preserve status and safe content/ETag headers, and
+stream or return the body. Do not forward browser cookies/Authorization.
+Upstream 401 is a server-configuration or subscription failure, not a
+not-found article.
 
 ## Customer renderer mode
 

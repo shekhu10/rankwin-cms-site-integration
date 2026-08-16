@@ -1,13 +1,15 @@
 # Generic server, proxy, or edge runtime
 
-The minimum integration is four fixed same-origin public routes whose server
+Run `scripts/discover_site.py` first. Use its authenticated `blogPath` as the
+only routing prefix; never default to `/blogs` or ask for a second path. The
+minimum integration is four fixed same-origin public routes whose server
 handler makes authenticated upstream requests:
 
 ```text
-/blogs                 -> <api-base>/articles?format=page
-/blogs/:slug           -> <api-base>/articles/:slug?format=page
-/blogs/sitemap.xml     -> <api-base>/sitemap.xml
-/blogs/feed.xml        -> <api-base>/feed.xml
+<blogPath>                 -> <api-base>/articles?format=page
+<blogPath>/:slug           -> <api-base>/articles/:slug?format=page
+<blogPath>/sitemap.xml     -> <api-base>/sitemap.xml
+<blogPath>/feed.xml        -> <api-base>/feed.xml
 ```
 
 Store `RANKWIN_CMS_API_BASE` and `RANKWIN_CMS_API_KEY` in the platform's
@@ -19,6 +21,11 @@ Order sitemap/feed before the slug catch-all. For root mode, preserve every
 existing product route before `/:slug` and use a non-conflicting sitemap path.
 Build upstream URLs from trusted configuration, percent-encode the slug once,
 reject separators/control characters, and use bounded timeouts.
+
+At startup or build time, compare any persisted routing prefix with a fresh
+authenticated discovery response. Fail closed on mismatch and regenerate the
+route configuration before deployment. A RankWin path change cannot mutate a
+customer server's route table without a new build or configuration rollout.
 
 Preserve status and safe content/validator headers. Keep upstream responses
 private; if caching a public response, key it by the configured site and route
