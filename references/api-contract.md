@@ -36,6 +36,8 @@ that the integration may read its configuration and content. Generate the
 customer index/detail/sitemap/feed routes from `site.blogPath`. Never accept a
 separate path entry or silently fall back to `/blogs`. A mismatch between the
 deployed route and authenticated `site.blogPath` is a failed integration.
+The same is true of `site.host`: it must be the customer's final HTTPS hostname,
+not an apex or `www` alias that redirects to a different canonical host.
 
 ## Endpoints
 

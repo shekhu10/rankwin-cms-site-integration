@@ -25,6 +25,11 @@ Forward `If-None-Match`; copy safe response headers (`Content-Type`, `ETag`,
 Map upstream 401 to an operational configuration failure without revealing the
 key; do not return an empty 200.
 
+Add the same-origin sitemap to `robots.txt`, a real sitemap index, or merge all
+published canonicals into the registered root sitemap. Do not list the sitemap
+document as a page URL. Verify that the discovered hostname is already the final
+non-redirecting hostname for the index, article, sitemap, and feed.
+
 ## Template-rendered JSON mode
 
 Model DTOs with unknown-field tolerance and an explicit `apiVersion` check.

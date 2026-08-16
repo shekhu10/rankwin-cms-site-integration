@@ -191,7 +191,17 @@ asset proxy.
 Expose the RankWin sitemap under the customer origin or merge it into the
 customer sitemap index. A public crawler reaches the customer route without a
 key; the customer server privately fetches RankWin with the key. The XML
-contains customer canonical URLs.
+contains customer canonical URLs. Merely creating `<blogPath>/sitemap.xml` is
+not discovery: either add its absolute URL as a `Sitemap:` line in the
+customer's `robots.txt`, include it as a `<sitemap>` child of a real sitemap
+index, or merge every published canonical into a registered root sitemap.
+Never list a sitemap document as a `<url>` inside a URL set.
+
+The configured `site.host`, each page's final response URL, its canonical link,
+Open Graph URL, sitemap URL, and feed URLs must use the same hostname. A 301/302
+from RankWin's configured canonical hostname to `www` (or the reverse) is a
+failed integration; correct the RankWin site hostname or the customer's primary
+domain before launch.
 
 Choose exactly one GA4 page-view owner. If RankWin-rendered HTML has a configured
 measurement ID, do not inject the same automatic page view again. For
@@ -209,29 +219,53 @@ python3 scripts/verify_integration.py \
 The verifier reads `RANKWIN_CMS_API_KEY` from the environment and never accepts
 it as a command-line argument. It derives the customer URL from authenticated
 `site.host` + `site.blogPath`; an optional `--customer-blog-url` must match that
-exact URL. Repeat fetch → inspect → fix → deploy → fetch until all checks pass.
-Verify:
+exact URL. It follows every list cursor and checks every published article,
+stable document node, canonical/final URL, initial HTML response, ETag, optional
+featured image, sitemap, feed, and sitemap registration. Repeat fetch → inspect
+→ fix → deploy → fetch until all deterministic checks pass.
+
+For a live two-site isolation exercise, set a second paid site's
+`RANKWIN_CMS_OTHER_API_BASE` and `RANKWIN_CMS_OTHER_API_KEY`; the verifier proves
+that neither valid key works against the other site. After a safe key rotation,
+set the already-revoked secret as `RANKWIN_CMS_REVOKED_API_KEY` to prove it now
+receives 401. These secrets remain environment-only.
+
+The HTTP verifier prints any control it could not exercise instead of claiming
+it passed. A consent-aware browser or GA4 DebugView must separately prove one
+page-view event. Root-path mode also requires a customer-framework route-manifest
+audit because a generic HTTP client cannot know every protected application
+route.
+
+The complete acceptance list is:
 
 1. no/malformed key receives 401, while the configured key receives 200;
 2. list JSON is `cms.v1` and every summary has `id`, slug, metadata, the
    customer canonical, and a valid nullable `featuredImage`;
 3. ID detail returns the same `id`, a document ID, uniquely-IDed non-empty
    blocks, HTML, SEO, and JSON-LD;
-4. another site's API base/key pair cannot retrieve the ID;
+4. another site's valid API base/key pair cannot retrieve the ID in either
+   direction (live when the optional second-site environment is supplied, and
+   always covered by RankWin's tenant-isolation test suite);
 5. customer index and article return 200 `text/html`, not API JSON;
 6. initial source contains title, canonical, body, and JSON-LD;
-7. sitemap/feed contain only the intended site's customer URLs;
+7. sitemap/feed contain only the intended site's customer URLs, and the sitemap
+   is registered in robots.txt/a sitemap index or fully merged into a registered
+   root sitemap;
 8. `If-None-Match` produces 304 through an authorized request;
-9. root-path mode does not shadow existing product/account routes;
-10. exactly one analytics page view fires;
+9. root-path mode does not shadow existing product/account routes (route-manifest
+   plus browser regression when root mode applies);
+10. exactly one analytics page view fires (consent-aware browser/GA4 DebugView);
 11. after a replacement is installed, revoking the old key makes that old key
-    receive 401 without interrupting the new one.
+    receive 401 without interrupting the new one (live when the revoked-key
+    environment is supplied, and always covered by RankWin's lifecycle tests).
 12. when a featured image exists, it loads without a bearer key, appears in the
     initial customer index card, article HTML, Open Graph/Twitter metadata, and
     Article JSON-LD with meaningful alt text; when absent, no broken or empty
     image container is rendered.
 13. the deployed index path exactly equals authenticated `site.blogPath`; no
     hard-coded `/blogs` fallback or second customer-entered path is accepted.
+14. the configured canonical hostname is the final non-redirecting hostname for
+    the index, every article, sitemap, and feed.
 
 Do not declare completion from an upstream API call alone. The canonical
 customer URL and its initial HTML are the acceptance boundary.

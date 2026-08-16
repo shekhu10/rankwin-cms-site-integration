@@ -44,6 +44,17 @@ stream or return the body. Do not forward browser cookies/Authorization.
 Upstream 401 is a server-configuration or subscription failure, not a
 not-found article.
 
+Register the dynamic `<blogPath>/sitemap.xml` as an actual sitemap. With
+`next-sitemap`, put its absolute URL in `robotsTxtOptions.additionalSitemaps`
+and exclude both `<blogPath>/sitemap.xml` and `<blogPath>/feed.xml` from the
+ordinary page URL set. If using a Next metadata `robots.ts`, return the RankWin
+sitemap in its `sitemap` field. Do not add the sitemap URL as a normal `<url>`.
+
+Keep the index, detail, sitemap, and feed on the exact non-redirecting hostname
+returned by discovery. A `www`/apex redirect means RankWin's configured host and
+the customer's primary domain disagree; correct the configuration rather than
+teaching the adapter to emit two canonical hosts.
+
 ## Customer renderer mode
 
 Fetch list in a Server Component. Use summary `id` for detail and summary
@@ -64,6 +75,11 @@ async function articleById(id: string) {
 data. Initial server HTML must contain the body and JSON-LD. Call `notFound()`
 only for authenticated 404. Use an error boundary or known-good cached page for
 401/429/5xx; never return an empty 200.
+
+For ISR, let an upstream failure throw so Next retains the last successfully
+generated page. Do not catch an authenticated list failure and replace it with
+an empty array: that converts an outage or revoked key into a cached blog that
+silently removes every RankWin article.
 
 When `featuredImage` is non-null, allowlist the exact RankWin production
 hostname and CMS media path in `images.remotePatterns`, render its `url` in both

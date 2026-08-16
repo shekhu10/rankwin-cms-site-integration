@@ -32,6 +32,13 @@ private; if caching a public response, key it by the configured site and route
 and invalidate it on ETag change. A redirect to `rankwin.co` is not same-origin
 delivery and must not be the final public article URL.
 
+Register `<blogPath>/sitemap.xml` through a `Sitemap:` line in `robots.txt`, a
+`<sitemap>` entry in a sitemap index, or a registered root sitemap containing
+every published canonical. A sitemap URL inside a normal `<urlset>` is not
+sitemap registration. The discovered host itself must be the final URL host;
+an apex/`www` redirect is a configuration mismatch, not a valid canonical
+delivery result.
+
 For a custom renderer, follow `references/api-contract.md`. Server-render the
 list/detail and expose customer canonical, sitemap, and crawlable links in the
 initial HTML.
