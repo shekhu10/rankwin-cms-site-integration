@@ -29,3 +29,12 @@ Use summary `id` to call `/articles/by-id/{id}` and include the bearer header.
 Validate that returned `article.id` equals the request and that all document
 node IDs are unique before persisting a synchronized copy. Keep slug as a route
 label, not a primary key.
+
+Model `featuredImage` as a nullable DTO containing `id`, HTTPS `url`, and
+meaningful `alt`. When present, render it in the server-generated index card and
+article header, and use the same URL in Open Graph/Twitter metadata and Article
+JSON-LD. Fetch the media URL without the delivery bearer key; it is the single
+public-media exception and is safe only because RankWin binds it to the active
+published site snapshot. When it is null, omit the `<img>`/wrapper and preserve
+the customer's existing text-only fallback. In proxy mode RankWin's HTML
+already performs this rendering; do not add a second hero image around it.

@@ -1,7 +1,13 @@
 ---
 name: rankwin-cms-site-integration
-description: Integrate any customer website with the paid RankWin CMS pull API using a server-only delivery API key. Use when implementing or repairing crawlable blog index/detail routes, stable article and block synchronization, authenticated HTML proxying, sitemap/feed delivery, metadata, caching, analytics, or end-to-end verification in Next.js, Java/Spring, another server framework, an edge worker, or a reverse proxy.
-metadata: {"clawdbot":{"requires":{"env":["RANKWIN_CMS_API_BASE","RANKWIN_CMS_API_KEY"]}}}
+description: Integrate any customer website with the paid RankWin CMS pull API using a server-only delivery API key. Use when implementing or repairing crawlable blog index/detail routes, stable article and block synchronization, authenticated HTML proxying, sitemap/feed delivery, metadata, optional featured images and public media, caching, analytics, or end-to-end verification in Next.js, Java/Spring, another server framework, an edge worker, or a reverse proxy.
+metadata:
+  {
+    "clawdbot":
+      {
+        "requires": { "env": ["RANKWIN_CMS_API_BASE", "RANKWIN_CMS_API_KEY"] },
+      },
+  }
 ---
 
 # RankWin CMS Site Integration
@@ -127,6 +133,8 @@ For customer-rendered JSON, render:
 - `<title>` from `metaTitle || title`
 - meta description and canonical link from `canonicalUrl`
 - Open Graph/Twitter values from `seo`
+- optional `featuredImage` (`{ id, url, alt }`) in the index card and article
+  header; keep the existing text-only layout when it is `null`
 - article body from sanitized `html` or a complete structured-document renderer
 - every object in `jsonLd` as `application/ld+json`
 - published and modified timestamps
@@ -135,6 +143,12 @@ For customer-rendered JSON, render:
 RankWin's `html` is sanitized by the CMS renderer. Do not concatenate untrusted
 customer input into it. If rendering `document`, exhaustively handle the
 versioned block union and escape text/attributes.
+
+The `featuredImage.url` is the sole public-media exception to bearer
+authorization. It is an immutable HTTPS URL intentionally loadable by browsers
+and crawlers, so fetch it without the delivery key. Never turn a private
+`/api/files/...` reference or another URL from article content into a public
+asset proxy.
 
 ### 6. Preserve cache and failure semantics
 
@@ -176,8 +190,8 @@ it as a command-line argument. Repeat fetch → inspect → fix → deploy → f
 until all checks pass. Verify:
 
 1. no/malformed key receives 401, while the configured key receives 200;
-2. list JSON is `cms.v1` and every summary has `id`, slug, metadata, and the
-   customer canonical;
+2. list JSON is `cms.v1` and every summary has `id`, slug, metadata, the
+   customer canonical, and a valid nullable `featuredImage`;
 3. ID detail returns the same `id`, a document ID, uniquely-IDed non-empty
    blocks, HTML, SEO, and JSON-LD;
 4. another site's API base/key pair cannot retrieve the ID;
@@ -189,6 +203,10 @@ until all checks pass. Verify:
 10. exactly one analytics page view fires;
 11. after a replacement is installed, revoking the old key makes that old key
     receive 401 without interrupting the new one.
+12. when a featured image exists, it loads without a bearer key, appears in the
+    initial customer index card, article HTML, Open Graph/Twitter metadata, and
+    Article JSON-LD with meaningful alt text; when absent, no broken or empty
+    image container is rendered.
 
 Do not declare completion from an upstream API call alone. The canonical
 customer URL and its initial HTML are the acceptance boundary.
