@@ -28,3 +28,12 @@ delivery and must not be the final public article URL.
 For a custom renderer, follow `references/api-contract.md`. Server-render the
 list/detail and expose customer canonical, sitemap, and crawlable links in the
 initial HTML.
+
+Treat `featuredImage` as nullable structured data, not as a required layout
+slot. When present, validate its HTTPS URL, render it with its `alt` on the
+index card and article page, and reuse the URL for Open Graph/Twitter metadata
+and Article JSON-LD. Browsers, social crawlers, and image optimizers fetch that
+media URL without the delivery bearer key. Do not generalize this exception
+into an arbitrary asset proxy. When absent, emit no broken `<img>` or empty
+wrapper and keep the customer's current text-only/fallback card. Authenticated
+HTML proxy mode already contains the correct optional image markup.

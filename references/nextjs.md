@@ -56,3 +56,11 @@ async function articleById(id: string) {
 data. Initial server HTML must contain the body and JSON-LD. Call `notFound()`
 only for authenticated 404. Use an error boundary or known-good cached page for
 401/429/5xx; never return an empty 200.
+
+When `featuredImage` is non-null, allowlist the exact RankWin production
+hostname and CMS media path in `images.remotePatterns`, render its `url` in both
+the index card and article header, and use its `alt`. Prefer `next/image` so the
+customer origin can optimize it. Prefer the same URL for Open Graph/Twitter
+metadata and the Article JSON-LD `image` field. The media request itself is
+public and must not contain the delivery key. When `featuredImage` is null,
+omit the image wrapper entirely and keep the customer's existing fallback.

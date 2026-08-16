@@ -81,6 +81,14 @@ def main() -> int:
     summary = articles[0]
     for field in ("id", "slug", "title", "metaDescription", "canonicalUrl"):
         assert summary.get(field), f"list summary missing {field}"
+    featured_image = summary.get("featuredImage")
+    assert featured_image is None or (
+        isinstance(featured_image, dict)
+        and featured_image.get("id")
+        and featured_image.get("alt")
+        and isinstance(featured_image.get("url"), str)
+        and featured_image["url"].startswith("https://")
+    ), "list summary has an invalid featuredImage"
 
     article_id = urllib.parse.quote(summary["id"], safe="")
     detail, headers = json_response(
@@ -92,11 +100,27 @@ def main() -> int:
     assert article.get("html"), "detail missing rendered HTML"
     assert article.get("seo"), "detail missing SEO projection"
     assert article.get("jsonLd"), "detail missing structured data"
+    assert article.get("featuredImage") == featured_image, (
+        "list/detail featuredImage mismatch"
+    )
     blocks = article.get("document", {}).get("blocks")
     assert isinstance(blocks, list) and blocks, "document has no blocks"
     block_ids = [block.get("id") for block in blocks]
     assert all(block_ids), "a block is missing id"
     assert len(block_ids) == len(set(block_ids)), "block IDs are not unique"
+
+    if featured_image:
+        media_status, media_headers, media_body = request(featured_image["url"])
+        assert media_status == 200, (
+            f"public featured image returned {media_status}"
+        )
+        assert (response_header(media_headers, "Content-Type") or "").startswith("image/"), (
+            "featured image response is not an image"
+        )
+        assert "immutable" in (
+            response_header(media_headers, "Cache-Control") or ""
+        ), "featured image is missing immutable caching"
+        assert media_body, "featured image response is empty"
 
     etag = response_header(headers, "ETag")
     assert etag, "detail has no ETag"
@@ -115,12 +139,17 @@ def main() -> int:
                 f"customer {label} is not HTML"
             )
             source = body.decode("utf-8", errors="replace")
+            decoded_source = urllib.parse.unquote(source)
             assert "rel=\"canonical\"" in source or "rel='canonical'" in source, (
                 f"customer {label} has no canonical"
             )
             if label == "article":
                 assert article["title"] in source, "article title absent from HTML"
                 assert "application/ld+json" in source, "JSON-LD absent from HTML"
+            if featured_image:
+                assert featured_image["url"] in decoded_source, (
+                    f"featured image absent from initial customer {label} HTML"
+                )
 
     print("RankWin CMS integration verified")
     return 0
