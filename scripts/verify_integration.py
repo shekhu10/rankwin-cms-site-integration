@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from discover_site import configured_value, parse_site, validate_api_base
 
 
 def request(
@@ -51,17 +52,34 @@ def response_header(headers: dict[str, str], name: str) -> str | None:
     )
 
 
+def normalized_customer_blog_url(value: str) -> str:
+    parsed = urllib.parse.urlsplit(value)
+    local_http = parsed.scheme == "http" and parsed.hostname in {
+        "127.0.0.1",
+        "::1",
+        "localhost",
+    }
+    if (parsed.scheme != "https" and not local_http) or not parsed.netloc:
+        raise AssertionError("customer blog URL must use HTTPS")
+    if parsed.query or parsed.fragment:
+        raise AssertionError(
+            "customer blog URL must not contain query or fragment data"
+        )
+    path = parsed.path.rstrip("/") or "/"
+    return urllib.parse.urlunsplit(
+        (parsed.scheme.lower(), parsed.netloc.lower(), path, "", "")
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--api-base", required=True)
+    parser.add_argument("--api-base", help="defaults to RANKWIN_CMS_API_BASE")
     parser.add_argument("--customer-blog-url")
     args = parser.parse_args()
-    api_base = args.api_base.rstrip("/")
-    api_key = os.environ.get("RANKWIN_CMS_API_KEY", "")
-    if not api_key:
-        raise AssertionError(
-            "RANKWIN_CMS_API_KEY is missing from the server environment"
-        )
+    api_base = validate_api_base(
+        configured_value(args.api_base, "RANKWIN_CMS_API_BASE")
+    )
+    api_key = configured_value(None, "RANKWIN_CMS_API_KEY")
 
     unauthenticated_status, _, _ = request(f"{api_base}/articles?limit=1")
     assert unauthenticated_status == 401, (
@@ -76,6 +94,15 @@ def main() -> int:
 
     page, _ = json_response(f"{api_base}/articles?limit=20", api_key)
     assert page.get("apiVersion") == "cms.v1", "unexpected API version"
+    site = parse_site(page)
+    expected_blog_url = normalized_customer_blog_url(site["customerBlogUrl"])
+    customer_blog_url = normalized_customer_blog_url(
+        args.customer_blog_url or site["customerBlogUrl"]
+    )
+    assert customer_blog_url == expected_blog_url, (
+        "customer blog URL does not match authenticated site.blogPath: "
+        f"expected {site['customerBlogUrl']}"
+    )
     articles = page.get("articles")
     assert isinstance(articles, list) and articles, "no published articles"
     summary = articles[0]
@@ -129,27 +156,26 @@ def main() -> int:
     )
     assert status == 304, f"conditional detail expected 304, received {status}"
 
-    if args.customer_blog_url:
-        blog = args.customer_blog_url.rstrip("/")
-        slug = urllib.parse.quote(summary["slug"], safe="")
-        for label, url in (("index", blog), ("article", f"{blog}/{slug}")):
-            status, response_headers, body = request(url)
-            assert status == 200, f"customer {label} returned {status}"
-            assert "text/html" in response_headers.get("Content-Type", ""), (
-                f"customer {label} is not HTML"
+    blog = customer_blog_url.rstrip("/")
+    slug = urllib.parse.quote(summary["slug"], safe="")
+    for label, url in (("index", blog), ("article", f"{blog}/{slug}")):
+        status, response_headers, body = request(url)
+        assert status == 200, f"customer {label} returned {status}"
+        assert "text/html" in (
+            response_header(response_headers, "Content-Type") or ""
+        ), f"customer {label} is not HTML"
+        source = body.decode("utf-8", errors="replace")
+        decoded_source = urllib.parse.unquote(source)
+        assert "rel=\"canonical\"" in source or "rel='canonical'" in source, (
+            f"customer {label} has no canonical"
+        )
+        if label == "article":
+            assert article["title"] in source, "article title absent from HTML"
+            assert "application/ld+json" in source, "JSON-LD absent from HTML"
+        if featured_image:
+            assert featured_image["url"] in decoded_source, (
+                f"featured image absent from initial customer {label} HTML"
             )
-            source = body.decode("utf-8", errors="replace")
-            decoded_source = urllib.parse.unquote(source)
-            assert "rel=\"canonical\"" in source or "rel='canonical'" in source, (
-                f"customer {label} has no canonical"
-            )
-            if label == "article":
-                assert article["title"] in source, "article title absent from HTML"
-                assert "application/ld+json" in source, "JSON-LD absent from HTML"
-            if featured_image:
-                assert featured_image["url"] in decoded_source, (
-                    f"featured image absent from initial customer {label} HTML"
-                )
 
     print("RankWin CMS integration verified")
     return 0
