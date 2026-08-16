@@ -43,6 +43,14 @@ def json_response(url: str, api_key: str) -> tuple[dict, dict[str, str]]:
     return json.loads(body), headers
 
 
+def response_header(headers: dict[str, str], name: str) -> str | None:
+    expected = name.casefold()
+    return next(
+        (value for key, value in headers.items() if key.casefold() == expected),
+        None,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--api-base", required=True)
@@ -90,7 +98,7 @@ def main() -> int:
     assert all(block_ids), "a block is missing id"
     assert len(block_ids) == len(set(block_ids)), "block IDs are not unique"
 
-    etag = headers.get("ETag")
+    etag = response_header(headers, "ETag")
     assert etag, "detail has no ETag"
     status, _, _ = request(
         f"{api_base}/articles/by-id/{article_id}", api_key=api_key, etag=etag
