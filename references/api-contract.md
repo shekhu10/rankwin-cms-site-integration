@@ -21,6 +21,7 @@ RankWin, even when the `articles` array is empty:
 {
   "apiVersion": "cms.v1",
   "site": {
+    "id": "opaque-site-id",
     "name": "Customer site",
     "host": "customer.example",
     "blogPath": "/resources/blog"
@@ -38,6 +39,12 @@ separate path entry or silently fall back to `/blogs`. A mismatch between the
 deployed route and authenticated `site.blogPath` is a failed integration.
 The same is true of `site.host`: it must be the customer's final HTTPS hostname,
 not an apex or `www` alias that redirects to a different canonical host.
+
+`site.id` is an opaque, non-secret identity for this exact site. The customer
+server must derive its public no-store `text/plain`
+`/.well-known/rankwin-site` response from this authenticated value, with the
+exact body `rankwin-site:<site.id>`. It is not another credential; never put the
+delivery API key in the marker or expose it to the browser.
 
 ## Endpoints
 

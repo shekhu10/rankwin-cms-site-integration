@@ -71,6 +71,11 @@ def parse_site(payload: object) -> dict[str, str]:
         raise RuntimeError("RankWin site discovery returned an unexpected API contract")
 
     site = payload["site"]
+    site_id = site.get("id")
+    if not isinstance(site_id, str) or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", site_id
+    ):
+        raise RuntimeError("RankWin returned an invalid site.id")
     host = site.get("host")
     labels = host.split(".") if isinstance(host, str) else []
     if not isinstance(host, str) or (
@@ -85,6 +90,7 @@ def parse_site(payload: object) -> dict[str, str]:
     suffix = "" if blog_path == "/" else blog_path
     return {
         "apiVersion": "cms.v1",
+        "id": site_id,
         "host": host,
         "blogPath": blog_path,
         "customerBlogUrl": f"https://{host}{suffix}/",
@@ -109,7 +115,7 @@ def discover(api_base: str, api_key: str) -> dict[str, str]:
         if error.code == 401:
             raise RuntimeError(
                 "RankWin rejected the delivery API key (401); replace the key "
-                "or restore the paid entitlement"
+                "or restore the subscription or trial entitlement"
             ) from error
         raise RuntimeError(f"RankWin site discovery returned HTTP {error.code}") from error
     except Exception as error:

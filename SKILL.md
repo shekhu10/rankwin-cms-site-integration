@@ -1,9 +1,11 @@
 ---
 name: rankwin-cms-site-integration
-description: Integrate any customer website with the paid RankWin CMS pull API using a server-only delivery API key and the authenticated site.blogPath selected in RankWin. Use when implementing or repairing crawlable blog index/detail routes, stable article and block synchronization, authenticated HTML proxying, sitemap/feed delivery, metadata, optional featured images and public media, caching, analytics, or end-to-end verification in Next.js, Java/Spring, another server framework, an edge worker, or a reverse proxy.
+description: Integrate any customer website with the RankWin CMS pull API using a server-only delivery API key and the authenticated site.blogPath selected in RankWin. Use when implementing or repairing crawlable blog index/detail routes, stable article and block synchronization, authenticated HTML proxying, sitemap/feed delivery, metadata, optional featured images and public media, caching, analytics, or end-to-end verification in Next.js, Java/Spring, another server framework, an edge worker, or a reverse proxy.
 ---
 
 # RankWin CMS Site Integration
+
+Contract bundle: `cms.v1 / 2026-09-06`. The repository copy is the release source; parent and installed copies must match it.
 
 Implement RankWin CMS on the customer website without adding a publishing
 receiver or modifying RankWin. Keep the customer URL canonical, keep the
@@ -20,7 +22,7 @@ Before editing code, complete this credential and discovery gate:
    `RANKWIN_CMS_API_BASE`, for example
    `https://rankwin.co/api/cms/v1/sites/rwcms_...`.
 3. On the same site card, create a **production delivery API key**. This control
-   is available only while the project has a paid publishing entitlement. Save
+   is available while the project has an active subscription or live introductory trial. Save
    the one-time secret as `RANKWIN_CMS_API_KEY` in the customer development
    environment. If either variable is absent, stop and ask the customer to set
    it in their local secret store or shell; never ask them to paste the key into
@@ -33,9 +35,10 @@ Before editing code, complete this credential and discovery gate:
    python3 <skill-directory>/scripts/discover_site.py
    ```
 
-   Read `host`, `blogPath`, and `customerBlogUrl` from the JSON output. Do not
-   ask the customer to retype the path and do not default to `/blogs`. Generate
-   every customer route from this exact `blogPath`.
+   Read `id`, `host`, `blogPath`, and `customerBlogUrl` from the JSON output.
+   `id` is an opaque, non-secret site identity. Do not ask the customer to
+   retype the path and do not default to `/blogs`. Generate every customer
+   route from this exact `blogPath`.
 
 5. Choose authenticated RankWin-rendered HTML proxying or customer-rendered
    JSON. Both must run on the server.
@@ -52,7 +55,10 @@ customer visitor's cookies or Authorization header to RankWin. Inject exactly
 the configured RankWin key on the customer server.
 
 No DNS TXT or CNAME step exists for pull delivery. Customer code makes content
-visible on a hostname the customer already controls.
+visible on a hostname the customer already controls. It must expose
+`/.well-known/rankwin-site` as no-store `text/plain` with the exact body
+`rankwin-site:<site.id>`, deriving `site.id` from authenticated discovery. This
+marker is not a third secret and must never contain the delivery API key.
 
 ## Workflow
 
@@ -68,6 +74,7 @@ as the route-generation input for this run:
 - `<blogPath>/[slug]` → article detail;
 - `<blogPath>/sitemap.xml` → sitemap;
 - `<blogPath>/feed.xml` → feed.
+- `/.well-known/rankwin-site` → `rankwin-site:<site.id>` as no-store plain text.
 
 For root mode (`blogPath === "/"`), use `/[slug]` only after preserving every
 existing product route and assigning non-conflicting sitemap/feed routes.
@@ -91,11 +98,12 @@ python3 <skill-directory>/scripts/discover_site.py
 
 The script reads both variables from the environment, sends the delivery key
 only in the Authorization header, and prints only non-secret site configuration.
-Expected: `apiVersion: cms.v1` plus the authenticated `site.host` and
-`site.blogPath`. HTTP 401 means the key is missing, malformed, revoked, scoped
-to another site, or the paid entitlement is inactive. Do not retry a 401. Ask
-an authorized RankWin project manager to create a replacement or restore the
-subscription; update the customer server, verify, then revoke the old key.
+Expected: `apiVersion: cms.v1` plus the authenticated `site.id`, `site.host`,
+and `site.blogPath`. HTTP 401 means the key is missing, malformed, revoked,
+scoped to another site, or the subscription or trial is inactive. Do not retry a
+401. Ask an authorized RankWin project manager to create a replacement or
+restore the subscription; update the customer server, verify, then revoke the
+old key.
 
 Persist the discovered path as ordinary server configuration if the framework
 needs it, but never let a separate customer-entered value override it. If an
@@ -224,7 +232,7 @@ stable document node, canonical/final URL, initial HTML response, ETag, optional
 featured image, sitemap, feed, and sitemap registration. Repeat fetch → inspect
 → fix → deploy → fetch until all deterministic checks pass.
 
-For a live two-site isolation exercise, set a second paid site's
+For a live two-site isolation exercise, set a second entitled site's
 `RANKWIN_CMS_OTHER_API_BASE` and `RANKWIN_CMS_OTHER_API_KEY`; the verifier proves
 that neither valid key works against the other site. After a safe key rotation,
 set the already-revoked secret as `RANKWIN_CMS_REVOKED_API_KEY` to prove it now
@@ -266,6 +274,8 @@ The complete acceptance list is:
     hard-coded `/blogs` fallback or second customer-entered path is accepted.
 14. the configured canonical hostname is the final non-redirecting hostname for
     the index, every article, sitemap, and feed.
+15. `/.well-known/rankwin-site` returns no-store plain text exactly equal to
+    `rankwin-site:<site.id>` from authenticated discovery, with no redirect.
 
 Do not declare completion from an upstream API call alone. The canonical
 customer URL and its initial HTML are the acceptance boundary.

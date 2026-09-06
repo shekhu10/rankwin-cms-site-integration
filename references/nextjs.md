@@ -35,6 +35,16 @@ export async function rankWinFetch(path: string, init: RequestInit = {}) {
 Never import this module from a Client Component and never name the key with a
 `NEXT_PUBLIC_` prefix.
 
+## Public renderer marker
+
+Create `app/.well-known/rankwin-site/route.ts`. Its server handler must perform
+authenticated no-store discovery, validate the opaque non-secret `site.id`, and
+return `rankwin-site:<site.id>` as `text/plain; charset=utf-8` with
+`Cache-Control: no-store`. It must never return or log the delivery key. Treat
+401/configuration/invalid-contract failures as terminal; treat 429, upstream
+5xx, timeouts, and network failures as retryable without replacing the marker
+with a fabricated value. Pull delivery needs no TXT or CNAME record.
+
 ## Authenticated HTML proxy mode
 
 Create fixed handlers for `<site.blogPath>`, `<site.blogPath>/[slug]`, the

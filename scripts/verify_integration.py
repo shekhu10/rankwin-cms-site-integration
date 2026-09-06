@@ -455,6 +455,24 @@ def main() -> int:
             f"expected {site['customerBlogUrl']}"
         )
 
+    marker_url = f"https://{site['host']}/.well-known/rankwin-site"
+    marker_response = request(marker_url, accept="text/plain")
+    assert_no_redirect(marker_response, marker_url, "customer RankWin site marker")
+    if not (response_header(marker_response.headers, "Content-Type") or "").startswith(
+        "text/plain"
+    ):
+        raise AssertionError("customer RankWin site marker is not text/plain")
+    if "no-store" not in (
+        response_header(marker_response.headers, "Cache-Control") or ""
+    ):
+        raise AssertionError("customer RankWin site marker is not no-store")
+    if marker_response.body.decode("utf-8", errors="strict").strip() != (
+        f"rankwin-site:{site['id']}"
+    ):
+        raise AssertionError(
+            "customer RankWin site marker does not match authenticated site.id"
+        )
+
     blog_response = request(customer_blog_url, accept="text/html")
     index_source, index_html = assert_html(
         blog_response, customer_blog_url, "index"
