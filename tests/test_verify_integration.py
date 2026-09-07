@@ -28,6 +28,30 @@ def response(
 
 
 class VerifyIntegrationTests(unittest.TestCase):
+    def test_article_text_allows_renderer_serialization_but_not_script_only_body(self) -> None:
+        body = "<p>Pramp &amp; practice <strong>interviews</strong> today.</p>"
+        verifier.assert_article_body(body, "<article><p>Pramp &amp; practice <b>interviews</b> today.</p></article>")
+        with self.assertRaisesRegex(AssertionError, "absent"):
+            verifier.assert_article_body(body, '<script type="application/json">Pramp & practice interviews today.</script><main>Loading</main>')
+        with self.assertRaisesRegex(AssertionError, "absent"):
+            verifier.assert_article_body("<p>" + "Beginning " * 30 + "MIDDLE " * 30 + "Ending " * 30 + "</p>", "<p>" + "Beginning " * 30 + "</p>")
+
+    def test_removed_url_requires_404_and_no_collection_links(self) -> None:
+        url = "https://www.example.com/blogs/removed"
+        site = {"customerBlogUrl": "https://www.example.com/blogs"}
+        gone = verifier.HttpResponse(404, {}, b"", url)
+        with patch.object(verifier, "request", return_value=gone):
+            verifier.verify_removed_urls([url], site, set())
+            with self.assertRaisesRegex(AssertionError, "still linked"):
+                verifier.verify_removed_urls([url], site, {url})
+        with patch.object(verifier, "request", return_value=response("old page", url=url)):
+            with self.assertRaisesRegex(AssertionError, "404 or 410"):
+                verifier.verify_removed_urls([url], site, set())
+        with patch.object(verifier, "request") as fetch:
+            with self.assertRaisesRegex(AssertionError, "authenticated customer"):
+                verifier.verify_removed_urls(["https://other.example/blogs/a"], site, set())
+            fetch.assert_not_called()
+
     def test_rejects_canonical_host_redirect(self) -> None:
         redirected = verifier.HttpResponse(
             200,

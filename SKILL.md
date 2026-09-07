@@ -5,7 +5,7 @@ description: Integrate any customer website with the RankWin CMS pull API using 
 
 # RankWin CMS Site Integration
 
-Contract bundle: `cms.v1 / 2026-09-07`. The repository copy is the release source; parent and installed copies must match it.
+Contract bundle: `cms.v1 / 2026-09-08`. The repository copy is the release source; parent and installed copies must match it.
 
 Implement RankWin CMS on the customer website without adding a publishing
 receiver or modifying RankWin. Keep the customer URL canonical, keep the
@@ -196,6 +196,11 @@ asset proxy.
 
 ### 7. Integrate sitemap, feed, and analytics
 
+Read `references/search-discovery.md` for the runtime sitemap, removal, and
+Google/Bing connection contract. Fetch the sitemap at request time; a build-time
+copy or hard-coded list is insufficient. Publishing must add the URL and
+unpublishing/deleting must remove it without a customer rebuild.
+
 Expose the RankWin sitemap under the customer origin or merge it into the
 customer sitemap index. A public crawler reaches the customer route without a
 key; the customer server privately fetches RankWin with the key. The XML
@@ -279,3 +284,8 @@ The complete acceptance list is:
 
 Do not declare completion from an upstream API call alone. The canonical
 customer URL and its initial HTML are the acceptance boundary.
+
+16. publish/update/unpublish a disposable article when authorized: verify the
+    customer sitemap reflects every transition without redeployment, and a
+    removed detail URL returns 404/410. Report this lifecycle check as untested
+    if no disposable article is available; do not delete existing content.

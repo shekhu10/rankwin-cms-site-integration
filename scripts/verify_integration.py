@@ -43,6 +43,43 @@ class HttpResponse:
     final_url: str
 
 
+class VisibleTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.hidden = 0
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        if tag in {"script", "style", "template"}:
+            self.hidden += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style", "template"} and self.hidden:
+            self.hidden -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self.hidden:
+            self.parts.append(data)
+
+
+def visible_text(source: str) -> str:
+    parser = VisibleTextParser()
+    parser.feed(source)
+    return " ".join(" ".join(parser.parts).split())
+
+
+def assert_article_body(expected_html: str, customer_html: str) -> None:
+    expected = visible_text(expected_html)
+    actual = visible_text(customer_html)
+    if not expected:
+        raise AssertionError("article body is empty")
+    # Customer renderers may insert widgets between blocks. Check text from
+    # the beginning, middle and end, independent of HTML/entity serialization.
+    starts = {0, max(0, len(expected) // 2 - 80), max(0, len(expected) - 160)}
+    if any(expected[start:start + 160] not in actual for start in starts):
+        raise AssertionError("article body is absent from initial HTML")
+
+
 class HtmlEvidenceParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -212,7 +249,7 @@ def assert_summary(summary: object, site: dict[str, str]) -> dict:
 
 
 def collect_articles(
-    api_base: str, api_key: str
+    api_base: str, api_key: str, *, allow_empty: bool = False
 ) -> tuple[dict[str, str], list[dict]]:
     articles: list[dict] = []
     cursor: str | None = None
@@ -249,7 +286,7 @@ def collect_articles(
         raise AssertionError("article pagination exceeded its safety limit")
     if site is None:
         raise AssertionError("site discovery was not returned")
-    if not articles:
+    if not articles and not allow_empty:
         raise AssertionError("no published articles")
     ids = [article["id"] for article in articles]
     if len(ids) != len(set(ids)):
@@ -427,10 +464,28 @@ def optional_isolation_checks(api_base: str, api_key: str, article_id: str) -> l
     return skipped
 
 
+def verify_removed_urls(urls: list[str], site: dict, visible_urls: set[str]) -> None:
+    """Read-only verification of URLs the operator has already unpublished."""
+    origin = urllib.parse.urlsplit(site["customerBlogUrl"])
+    prefix = origin.path.rstrip("/") + "/"
+    for raw in urls:
+        url = normalized_public_url(raw)
+        parsed = urllib.parse.urlsplit(url)
+        if (parsed.scheme, parsed.netloc) != (origin.scheme, origin.netloc) or not parsed.path.startswith(prefix) or parsed.path == prefix:
+            raise AssertionError("removed URL must be an article under the authenticated customer blog")
+        if url in visible_urls:
+            raise AssertionError("removed URL is still linked in the sitemap, feed, or index")
+        result = request(raw, accept="text/html")
+        assert_no_redirect(result, raw, "removed article")
+        if result.status not in (404, 410):
+            raise AssertionError("removed article must return HTTP 404 or 410")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--api-base", help="defaults to RANKWIN_CMS_API_BASE")
     parser.add_argument("--customer-blog-url")
+    parser.add_argument("--removed-url", action="append", default=[], help="already unpublished customer URL; repeat for multiple URLs")
     args = parser.parse_args()
     api_base = validate_api_base(
         configured_value(args.api_base, "RANKWIN_CMS_API_BASE")
@@ -444,7 +499,7 @@ def main() -> int:
     ).status != 401:
         raise AssertionError("malformed/invalid key did not return 401")
 
-    site, articles = collect_articles(api_base, api_key)
+    site, articles = collect_articles(api_base, api_key, allow_empty=bool(args.removed_url))
     expected_blog_url = normalized_public_url(site["customerBlogUrl"])
     customer_blog_url = normalized_public_url(
         args.customer_blog_url or site["customerBlogUrl"]
@@ -458,12 +513,12 @@ def main() -> int:
     marker_url = f"https://{site['host']}/.well-known/rankwin-site"
     marker_response = request(marker_url, accept="text/plain")
     assert_no_redirect(marker_response, marker_url, "customer RankWin site marker")
-    if not (response_header(marker_response.headers, "Content-Type") or "").startswith(
+    if not (response_header(marker_response, "Content-Type") or "").startswith(
         "text/plain"
     ):
         raise AssertionError("customer RankWin site marker is not text/plain")
     if "no-store" not in (
-        response_header(marker_response.headers, "Cache-Control") or ""
+        response_header(marker_response, "Cache-Control") or ""
     ):
         raise AssertionError("customer RankWin site marker is not no-store")
     if marker_response.body.decode("utf-8", errors="strict").strip() != (
@@ -518,15 +573,11 @@ def main() -> int:
         article_source, article_html = assert_html(
             article_response, article_url, f"article {summary['slug']}"
         )
-        if article["title"] not in article_source:
+        if visible_text(article["title"]) not in visible_text(article_source):
             raise AssertionError("article title is absent from initial HTML")
         if article_html.json_ld_count == 0:
             raise AssertionError("article JSON-LD is absent from initial HTML")
-        if article["html"] not in article_source:
-            text_fragment = re.sub(r"<[^>]+>", " ", article["html"])
-            text_fragment = " ".join(text_fragment.split())[:80]
-            if text_fragment and text_fragment not in " ".join(article_source.split()):
-                raise AssertionError("article body is absent from initial HTML")
+        assert_article_body(article["html"], article_source)
 
         featured_image = summary.get("featuredImage")
         if featured_image:
@@ -563,7 +614,7 @@ def main() -> int:
             index_links.add(normalized_public_url(joined))
         except AssertionError:
             continue
-    if not expected_canonicals.intersection(index_links):
+    if expected_canonicals and not expected_canonicals.intersection(index_links):
         raise AssertionError("customer index has no crawlable RankWin article links")
 
     sitemap_url = f"{customer_blog_url.rstrip('/')}/sitemap.xml"
@@ -588,7 +639,12 @@ def main() -> int:
     )
     verify_sitemap_registration(customer_origin, sitemap_url, expected_canonicals)
 
-    skipped = optional_isolation_checks(api_base, api_key, articles[0]["id"])
+    verify_removed_urls(args.removed_url, site, sitemap_urls | feed_urls | index_links)
+    skipped = optional_isolation_checks(api_base, api_key, articles[0]["id"]) if articles else [
+        "article content, ETag, media and cross-site isolation (no remaining published article)"
+    ]
+    if not args.removed_url:
+        skipped.append("removed URL lifecycle (pass --removed-url after unpublishing a disposable article)")
     if site["blogPath"] == "/":
         skipped.append(
             "root-path route-collision audit (requires the customer framework's route manifest)"
@@ -599,7 +655,7 @@ def main() -> int:
 
     print(
         f"RankWin CMS deterministic integration verified: {len(articles)} article(s), "
-        "canonical HTML, sitemap, feed, registration, ETag, media, and stable IDs"
+        "canonical HTML, sitemap, feed and registration; see unexercised controls below"
     )
     if skipped:
         print("External/operator controls not exercised by this HTTP verifier:")

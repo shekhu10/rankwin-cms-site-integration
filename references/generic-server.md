@@ -51,3 +51,12 @@ media URL without the delivery bearer key. Do not generalize this exception
 into an arbitrary asset proxy. When absent, emit no broken `<img>` or empty
 wrapper and keep the customer's current text-only/fallback card. Authenticated
 HTML proxy mode already contains the correct optional image markup.
+
+
+Fetch sitemap, feed, index, and detail from authenticated RankWin at request
+time when immediate publish/removal visibility is required. Disable public
+CDN/proxy caches (`Cache-Control: no-store`) unless a tested invalidation flow
+covers every lifecycle transition. Do not generate an index-only XML fallback
+on upstream failure. Preserve authenticated 404 as a public 404/410 after
+unpublication; do not redirect deleted articles to the blog index. Read
+`search-discovery.md` for runtime acceptance checks and Google/Bing setup.

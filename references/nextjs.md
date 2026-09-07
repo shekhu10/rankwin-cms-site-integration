@@ -27,7 +27,7 @@ export async function rankWinFetch(path: string, init: RequestInit = {}) {
       ...init.headers,
       Authorization: `Bearer ${key}`,
     },
-    next: { revalidate: 300 },
+    cache: "no-store",
   });
 }
 ```
@@ -98,3 +98,23 @@ customer origin can optimize it. Prefer the same URL for Open Graph/Twitter
 metadata and the Article JSON-LD `image` field. The media request itself is
 public and must not contain the delivery key. When `featuredImage` is null,
 omit the image wrapper entirely and keep the customer's existing fallback.
+
+## Runtime sitemap and deletion
+
+Use a dynamic Route Handler for `<blogPath>/sitemap.xml` with
+`export const dynamic = "force-dynamic"`. Fetch `<api-base>/sitemap.xml` with
+`cache: "no-store"`, preserve the XML and upstream error status, and return
+`Cache-Control: no-store` on the customer response. Never fall back to an
+index-only sitemap on an upstream error. Existing build-time `next-sitemap`
+output may register the dynamic child, but must not freeze its article list.
+
+Use no-store fetches for the article index and detail too when immediate
+publish/removal visibility is required. Static export and build-only article
+lists cannot satisfy this contract. If using a cache, require a working
+invalidation mechanism covering index, detail, sitemap, feed, and CDN before
+claiming immediate lifecycle support. A deleted upstream detail must become
+an HTTP 404/410, including previously cached routes.
+
+Read `search-discovery.md` for IndexNow's public ownership-file route and the
+project-level Google/Bing setup. That public ownership key is distinct from
+the secret delivery key.

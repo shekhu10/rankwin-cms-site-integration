@@ -50,3 +50,12 @@ public-media exception and is safe only because RankWin binds it to the active
 published site snapshot. When it is null, omit the `<img>`/wrapper and preserve
 the customer's existing text-only fallback. In proxy mode RankWin's HTML
 already performs this rendering; do not add a second hero image around it.
+
+
+Fetch sitemap, feed, index, and detail from authenticated RankWin at request
+time when immediate publish/removal visibility is required. Disable public
+CDN/proxy caches (`Cache-Control: no-store`) unless a tested invalidation flow
+covers every lifecycle transition. Do not generate an index-only XML fallback
+on upstream failure. Preserve authenticated 404 as a public 404/410 after
+unpublication; do not redirect deleted articles to the blog index. Read
+`search-discovery.md` for runtime acceptance checks and Google/Bing setup.
