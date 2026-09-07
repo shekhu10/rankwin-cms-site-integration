@@ -180,6 +180,20 @@ and crawlers, so fetch it without the delivery key. Never turn a private
 `/api/files/...` reference or another URL from article content into a public
 asset proxy.
 
+When `featuredImage` is non-null, render the exact public media URL in every
+corresponding index card and prominently at the top of the article, before its
+main body. Preserve the supplied alt text and aspect ratio; reserve image space
+to avoid layout shift. A CSS background or editor-only preview does not satisfy
+this contract. Allow the authenticated API's media origin in image optimizers;
+never hard-code a customer domain, product name, or article slug.
+
+If the editor has an image but delivery returns null, inspect the saved article
+revision and active publication snapshot. Images generated after the first draft
+must be saved into a new revision and that revision republished through the
+normal publication flow. Do not hide the defect with a stock placeholder, change
+an immutable snapshot in place, or expose a private storage URL. Verify real
+image bytes without authentication as well as rendered image tags on both pages.
+
 ### 6. Preserve cache and failure semantics
 
 - Keep upstream RankWin responses private; they are bearer-authorized. Cache a
