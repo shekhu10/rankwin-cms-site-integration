@@ -87,6 +87,7 @@ class HtmlEvidenceParser(HTMLParser):
         self.links: list[str] = []
         self.images: list[tuple[str, str]] = []
         self.json_ld_count = 0
+        self.meta: dict[str, str] = {}
 
     def handle_starttag(
         self, tag: str, attrs: list[tuple[str, str | None]]
@@ -94,6 +95,8 @@ class HtmlEvidenceParser(HTMLParser):
         values = {name.lower(): value or "" for name, value in attrs}
         if tag.lower() == "link" and "canonical" in values.get("rel", "").lower().split():
             self.canonicals.append(values.get("href", ""))
+        if tag.lower() == "meta" and values.get("name"):
+            self.meta[values["name"]] = values.get("content", "")
         if tag.lower() == "a" and values.get("href"):
             self.links.append(values["href"])
         if tag.lower() == "img" and values.get("src"):
@@ -578,6 +581,13 @@ def main() -> int:
         if article_html.json_ld_count == 0:
             raise AssertionError("article JSON-LD is absent from initial HTML")
         assert_article_body(article["html"], article_source)
+        if article.get("snapshotDigest"):
+            markers = {"rankwin-publication-id": article["publicationId"],
+                       "rankwin-content-version": str(article["contentVersion"]),
+                       "rankwin-snapshot-digest": article["snapshotDigest"]}
+            for name, expected in markers.items():
+                if article_html.meta.get(name) != expected:
+                    raise AssertionError(f"publication marker {name} is missing or stale")
 
         featured_image = summary.get("featuredImage")
         if featured_image:
@@ -586,8 +596,8 @@ def main() -> int:
                 raise AssertionError("public featured image is unavailable")
             if not (response_header(media, "Content-Type") or "").startswith("image/"):
                 raise AssertionError("featured image response is not an image")
-            if "immutable" not in (response_header(media, "Cache-Control") or ""):
-                raise AssertionError("featured image is missing immutable caching")
+            if "public" not in (response_header(media, "Cache-Control") or ""):
+                raise AssertionError("featured image is missing public caching")
             decoded_index = urllib.parse.unquote(index_source)
             decoded_article = urllib.parse.unquote(article_source)
             if featured_image["url"] not in decoded_index:

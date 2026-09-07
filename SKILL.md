@@ -167,6 +167,12 @@ For customer-rendered JSON, render:
   header; keep the existing text-only layout when it is `null`
 - article body from sanitized `html` or a complete structured-document renderer
 - every object in `jsonLd` as `application/ld+json`
+- publication verification meta tags: `rankwin-publication-id` from
+  `article.publicationId`, `rankwin-content-version` from `article.contentVersion`,
+  and `rankwin-snapshot-digest` from `article.snapshotDigest`. Emit them in the
+  server-rendered HTML head when the digest is supplied; preserve these fields
+  through adapter types and both slug and by-ID reads. Search discovery checks
+  the exact active publication before submitting its URL.
 - published and modified timestamps
 - crawlable index links using each summary's canonical URL/slug
 
