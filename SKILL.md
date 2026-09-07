@@ -5,7 +5,7 @@ description: Integrate any customer website with the RankWin CMS pull API using 
 
 # RankWin CMS Site Integration
 
-Contract bundle: `cms.v1 / 2026-09-06`. The repository copy is the release source; parent and installed copies must match it.
+Contract bundle: `cms.v1 / 2026-09-07`. The repository copy is the release source; parent and installed copies must match it.
 
 Implement RankWin CMS on the customer website without adding a publishing
 receiver or modifying RankWin. Keep the customer URL canonical, keep the
@@ -21,10 +21,10 @@ Before editing code, complete this credential and discovery gate:
 2. Copy its persistent API base into the customer development environment as
    `RANKWIN_CMS_API_BASE`, for example
    `https://rankwin.co/api/cms/v1/sites/rwcms_...`.
-3. On the same site card, create a **production delivery API key**. This control
+3. On the same site card, copy an active **production delivery API key**, or create one. This control
    is available while the project has an active subscription or live introductory trial. Save
-   the one-time secret as `RANKWIN_CMS_API_KEY` in the customer development
-   environment. If either variable is absent, stop and ask the customer to set
+   the key as `RANKWIN_CMS_API_KEY` in the customer development
+   environment. Saved keys remain visible in the authorized RankWin setup screen after reload. Older keys stored only as a hash need **Save existing key** once before they can be displayed again. If either variable is absent, stop and ask the customer to set
    it in their local secret store or shell; never ask them to paste the key into
    chat or source code.
 4. Authenticate and discover the authoritative site configuration before
