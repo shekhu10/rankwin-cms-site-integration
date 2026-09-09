@@ -52,6 +52,11 @@ into an arbitrary asset proxy. When absent, emit no broken `<img>` or empty
 wrapper and keep the customer's current text-only/fallback card. Authenticated
 HTML proxy mode already contains the correct optional image markup.
 
+Article detail layout must be **one visible `<h1>` title → optional featured
+image → description/byline/dates and article body**, in both DOM and visual
+order. Place the image immediately after the headline; omit only the image
+wrapper when absent. Keep the index-card design independent. Verify this order
+in the initial HTML and at desktop and mobile widths.
 
 Fetch sitemap, feed, index, and detail from authenticated RankWin at request
 time when immediate publish/removal visibility is required. Disable public

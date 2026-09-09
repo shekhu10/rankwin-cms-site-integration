@@ -80,32 +80,73 @@ def assert_article_body(expected_html: str, customer_html: str) -> None:
         raise AssertionError("article body is absent from initial HTML")
 
 
-class HtmlEvidenceParser(HTMLParser):
+class HtmlEvidenceParser(VisibleTextParser):
     def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
+        super().__init__()
         self.canonicals: list[str] = []
         self.links: list[str] = []
         self.images: list[tuple[str, str]] = []
+        self.image_text_offsets: list[int] = []
+        self.headings: list[tuple[int, str]] = []
+        self._heading_start: int | None = None
         self.json_ld_count = 0
         self.meta: dict[str, str] = {}
 
     def handle_starttag(
         self, tag: str, attrs: list[tuple[str, str | None]]
     ) -> None:
+        super().handle_starttag(tag, attrs)
         values = {name.lower(): value or "" for name, value in attrs}
+        if tag == "h1" and not self.hidden:
+            self._heading_start = len(self.parts)
         if tag.lower() == "link" and "canonical" in values.get("rel", "").lower().split():
             self.canonicals.append(values.get("href", ""))
         if tag.lower() == "meta" and values.get("name"):
             self.meta[values["name"]] = values.get("content", "")
         if tag.lower() == "a" and values.get("href"):
             self.links.append(values["href"])
-        if tag.lower() == "img" and values.get("src"):
+        if tag.lower() == "img" and values.get("src") and not self.hidden:
             self.images.append((values["src"], values.get("alt", "")))
+            self.image_text_offsets.append(len(self.parts))
         if (
             tag.lower() == "script"
             and values.get("type", "").lower() == "application/ld+json"
         ):
             self.json_ld_count += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "h1" and self._heading_start is not None:
+            title = " ".join(" ".join(self.parts[self._heading_start:]).split())
+            self.headings.append((len(self.parts), title))
+            self._heading_start = None
+        super().handle_endtag(tag)
+
+
+def assert_article_layout(article: dict, evidence: HtmlEvidenceParser) -> None:
+    title = " ".join(article["title"].split())
+    if len(evidence.headings) != 1 or evidence.headings[0][1] != title:
+        raise AssertionError("article must have one visible h1 containing its title")
+    image = article.get("featuredImage")
+    if not image:
+        return
+    matches = [
+        (offset, alt)
+        for (source, alt), offset in zip(evidence.images, evidence.image_text_offsets)
+        if source == image["url"] or image["url"] in urllib.parse.parse_qs(
+            urllib.parse.urlsplit(source).query
+        ).get("url", [])
+    ]
+    if not matches:
+        raise AssertionError("featured image is absent from initial article image tags")
+    image_offset, alt = matches[0]
+    if image_offset < evidence.headings[0][0]:
+        raise AssertionError("article title must precede the featured image")
+    if alt != image["alt"]:
+        raise AssertionError("featured image alt text does not match RankWin")
+    body_start = visible_text(article["html"])[:160]
+    after_image = " ".join(" ".join(evidence.parts[image_offset:]).split())
+    if body_start not in after_image:
+        raise AssertionError("article body must follow the featured image")
 
 
 def request(
@@ -581,6 +622,7 @@ def main() -> int:
         if article_html.json_ld_count == 0:
             raise AssertionError("article JSON-LD is absent from initial HTML")
         assert_article_body(article["html"], article_source)
+        assert_article_layout(article, article_html)
         if article.get("snapshotDigest"):
             markers = {"rankwin-publication-id": article["publicationId"],
                        "rankwin-content-version": str(article["contentVersion"]),

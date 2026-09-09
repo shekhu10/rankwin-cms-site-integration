@@ -51,6 +51,11 @@ published site snapshot. When it is null, omit the `<img>`/wrapper and preserve
 the customer's existing text-only fallback. In proxy mode RankWin's HTML
 already performs this rendering; do not add a second hero image around it.
 
+Article detail layout must be **one visible `<h1>` title → optional featured
+image → description/byline/dates and article body**, in both DOM and visual
+order. Place the image immediately after the headline; omit only the image
+wrapper when absent. Keep the index-card design independent. Verify this order
+in the initial HTML and at desktop and mobile widths.
 
 Fetch sitemap, feed, index, and detail from authenticated RankWin at request
 time when immediate publish/removal visibility is required. Disable public

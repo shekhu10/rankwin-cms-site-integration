@@ -5,7 +5,7 @@ description: Integrate any customer website with the RankWin CMS pull API using 
 
 # RankWin CMS Site Integration
 
-Contract bundle: `cms.v1 / 2026-09-08`. The repository copy is the release source; parent and installed copies must match it.
+Contract bundle: `cms.v1 / 2026-09-09`. The repository copy is the release source; parent and installed copies must match it.
 
 Implement RankWin CMS on the customer website without adding a publishing
 receiver or modifying RankWin. Keep the customer URL canonical, keep the
@@ -163,8 +163,10 @@ For customer-rendered JSON, render:
 - `<title>` from `metaTitle || title`
 - meta description and canonical link from `canonicalUrl`
 - Open Graph/Twitter values from `seo`
-- optional `featuredImage` (`{ id, url, alt }`) in the index card and article
-  header; keep the existing text-only layout when it is `null`
+- one visible article `<h1>` from `title`, followed by the optional
+  `featuredImage` (`{ id, url, alt }`), then the article content; keep the title
+  and text-only layout when the image is `null`
+- optional `featuredImage` in the index card
 - article body from sanitized `html` or a complete structured-document renderer
 - every object in `jsonLd` as `application/ld+json`
 - publication verification meta tags: `rankwin-publication-id` from
@@ -187,9 +189,13 @@ and crawlers, so fetch it without the delivery key. Never turn a private
 asset proxy.
 
 When `featuredImage` is non-null, render the exact public media URL in every
-corresponding index card and prominently at the top of the article, before its
-main body. Preserve the supplied alt text and aspect ratio; reserve image space
-to avoid layout shift. A CSS background or editor-only preview does not satisfy
+corresponding index card. Article detail pages must use this reading order in
+both server HTML and the visible desktop/mobile layout: **title (`h1`) → featured
+image → article content**. Place the image immediately after the headline, then
+the description/byline/dates and main body. Do not place it above the headline
+or use CSS ordering that differs from the DOM. This detail-page rule does not
+change the customer's index-card layout. Preserve the supplied alt text and
+aspect ratio; reserve image space to avoid layout shift. A CSS background or editor-only preview does not satisfy
 this contract. Allow the authenticated API's media origin in image optimizers;
 never hard-code a customer domain, product name, or article slug.
 
@@ -294,7 +300,9 @@ The complete acceptance list is:
 12. when a featured image exists, it loads without a bearer key, appears in the
     initial customer index card, article HTML, Open Graph/Twitter metadata, and
     Article JSON-LD with meaningful alt text; when absent, no broken or empty
-    image container is rendered.
+    image container is rendered. The visible article `h1` precedes the featured
+    image, which precedes the body, in initial HTML and desktop/mobile browser
+    checks; metadata, preload links, and breadcrumb text do not count as the title.
 13. the deployed index path exactly equals authenticated `site.blogPath`; no
     hard-coded `/blogs` fallback or second customer-entered path is accepted.
 14. the configured canonical hostname is the final non-redirecting hostname for

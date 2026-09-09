@@ -36,6 +36,37 @@ class VerifyIntegrationTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, "absent"):
             verifier.assert_article_body("<p>" + "Beginning " * 30 + "MIDDLE " * 30 + "Ending " * 30 + "</p>", "<p>" + "Beginning " * 30 + "</p>")
 
+    def test_article_layout_requires_title_image_body_order(self) -> None:
+        article = {"title": "A & B", "html": "<p>Full article body.</p>",
+                   "featuredImage": {"url": "https://cms.example/media/hero", "alt": "Cover"}}
+        title = "<h1>A &amp; <span>B</span></h1>"
+        image = '<img src="https://cms.example/media/hero" alt="Cover">'
+        body = article["html"]
+        optimized = '<img src="/_next/image?url=https%3A%2F%2Fcms.example%2Fmedia%2Fhero&amp;w=800" alt="Cover">'
+        for source in [title + image + body, title + optimized + body]:
+            evidence = verifier.HtmlEvidenceParser()
+            evidence.feed(source)
+            verifier.assert_article_layout(article, evidence)
+        cases = [
+            (image + title + body, "title must precede"),
+            (title + body + image, "body must follow"),
+            (image + body, "one visible h1"),
+            (title + title + image + body, "one visible h1"),
+            (title + '<script>' + image + '</script>' + body, "image tags"),
+            (title + '<template>' + image + '</template>' + body, "image tags"),
+            (title + image.replace('Cover', 'Wrong alt') + body, "alt text"),
+            (title + image.replace('/hero', '/hero-wrong') + body, "image tags"),
+        ]
+        for source, error in cases:
+            with self.subTest(error=error):
+                evidence = verifier.HtmlEvidenceParser()
+                evidence.feed(source)
+                with self.assertRaisesRegex(AssertionError, error):
+                    verifier.assert_article_layout(article, evidence)
+        evidence = verifier.HtmlEvidenceParser()
+        evidence.feed(title + body)
+        verifier.assert_article_layout({**article, "featuredImage": None}, evidence)
+
     def test_removed_url_requires_404_and_no_collection_links(self) -> None:
         url = "https://www.example.com/blogs/removed"
         site = {"customerBlogUrl": "https://www.example.com/blogs"}

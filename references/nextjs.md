@@ -99,6 +99,26 @@ metadata and the Article JSON-LD `image` field. The media request itself is
 public and must not contain the delivery key. When `featuredImage` is null,
 omit the image wrapper entirely and keep the customer's existing fallback.
 
+Article detail layout must be **one visible `<h1>` title → optional featured
+image → description/byline/dates and article body**, in both DOM and visual
+order. Place the image immediately after the headline; omit only the image
+wrapper when absent. Keep the index-card design independent. Verify this order
+in the initial HTML and at desktop and mobile widths.
+
+```tsx
+<article>
+  <header>
+    <h1>{article.title}</h1>
+    {article.featuredImage && <FeaturedImage image={article.featuredImage} />}
+    {/* Description, byline, and publication dates follow the image. */}
+  </header>
+  <div dangerouslySetInnerHTML={{ __html: article.html }} />
+</article>
+```
+
+`FeaturedImage` represents the customer's image component with the supplied
+URL/alt and reserved aspect ratio; keep the body server-rendered.
+
 ## Runtime sitemap and deletion
 
 Use a dynamic Route Handler for `<blogPath>/sitemap.xml` with
