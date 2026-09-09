@@ -119,6 +119,20 @@ in the initial HTML and at desktop and mobile widths.
 `FeaturedImage` represents the customer's image component with the supplied
 URL/alt and reserved aspect ratio; keep the body server-rendered.
 
+## Streamed metadata verification
+
+Use `generateMetadata` for the canonical link, robots directives, and the three
+RankWin publication markers. Next.js may append resolved metadata directly to
+`body` when streaming a dynamic page. RankWin checks both head metadata and
+these document-level body tags. Do not duplicate them inside the article or
+place them only in JavaScript. Conflicting canonicals, stale markers, and
+noindex directives must still fail verification. There is no need to disable
+streaming for every visitor or impersonate a search engine's user agent.
+
+Verify the complete HTTP response using `RankWin-PublicationVerifier/1.0
+(+https://rankwin.co)` as well as the browser-rendered page. See the official
+[Next.js streaming metadata documentation](https://nextjs.org/docs/app/api-reference/functions/generate-metadata#streaming-metadata).
+
 ## Runtime sitemap and deletion
 
 Use a dynamic Route Handler for `<blogPath>/sitemap.xml` with

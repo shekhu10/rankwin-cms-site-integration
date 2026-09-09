@@ -172,8 +172,10 @@ For customer-rendered JSON, render:
 - publication verification meta tags: `rankwin-publication-id` from
   `article.publicationId`, `rankwin-content-version` from `article.contentVersion`,
   and `rankwin-snapshot-digest` from `article.snapshotDigest`. Emit them in the
-  server-rendered HTML head when the digest is supplied; preserve these fields
-  through adapter types and both slug and by-ID reads. Search discovery checks
+  server-rendered document metadata when the digest is supplied. Frameworks may
+  place metadata in the head or stream it as direct children of the body; it
+  must be real HTML tags, not script strings or tags nested in article content.
+  Preserve these fields through adapter types and both slug and by-ID reads. Search discovery checks
   the exact active publication before submitting its URL.
 - published and modified timestamps
 - crawlable index links using each summary's canonical URL/slug
