@@ -28,6 +28,17 @@ def response(
 
 
 class VerifyIntegrationTests(unittest.TestCase):
+    def test_tables_require_real_headers_rows_and_cells(self) -> None:
+        cell = lambda text: {"children": [{"type": "text", "text": text}]}
+        document = {"blocks": [{"type": "table", "header": {"cells": [cell("Tool"), cell("Use")]},
+                                "rows": [{"cells": [cell("A & B"), cell("Coding")]}]}]}
+        html = "<table><thead><tr><th>Tool</th><th>Use</th></tr></thead><tbody><tr><td>A &amp; B</td><td><strong>Coding</strong></td></tr></tbody></table>"
+        verifier.assert_article_tables(document, html)
+        for broken in ["<p>Tool | Use | A &amp; B | Coding</p>", "<template>" + html + "</template>",
+                       html.replace("<td><strong>Coding</strong></td>", ""), html.replace("th>", "td>")]:
+            with self.subTest(source=broken), self.assertRaisesRegex(AssertionError, "table"):
+                verifier.assert_article_tables(document, broken)
+
     def test_article_text_allows_renderer_serialization_but_not_script_only_body(self) -> None:
         body = "<p>Pramp &amp; practice <strong>interviews</strong> today.</p>"
         verifier.assert_article_body(body, "<article><p>Pramp &amp; practice <b>interviews</b> today.</p></article>")

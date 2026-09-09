@@ -119,6 +119,37 @@ in the initial HTML and at desktop and mobile widths.
 `FeaturedImage` represents the customer's image component with the supplied
 URL/alt and reserved aspect ratio; keep the body server-rendered.
 
+### Table presentation
+
+Preserve `table`, `thead`, `tbody`, `tr`, `th`, `td`, `caption`, and the
+`rankwin-table-scroll` wrapper class when sanitizing the body. Apply scoped
+styles using the customer's theme colors, for example:
+
+```css
+.rankwin-cms-content .rankwin-table-scroll {
+  max-width: 100%; overflow-x: auto; margin: 1.5rem 0;
+  border: 1px solid var(--table-border); border-radius: .75rem;
+}
+.rankwin-cms-content table {
+  width: 100%; min-width: 40rem; margin: 0; border-collapse: collapse;
+  font-size: .9375rem; line-height: 1.6;
+}
+.rankwin-cms-content :is(th, td) {
+  min-width: 9rem;
+  padding: .875rem 1rem; text-align: left; vertical-align: top;
+  border-bottom: 1px solid var(--table-border); overflow-wrap: anywhere;
+}
+.rankwin-cms-content th { background: var(--table-header); font-weight: 700; }
+.rankwin-cms-content tbody tr:last-child td { border-bottom: 0; }
+```
+
+Resolve the example color variables to existing light/dark theme tokens. Keep
+the article's flex/grid ancestors shrinkable (`min-width: 0` where needed).
+Verify the actual published table at desktop and 390px mobile widths: all
+cells remain readable, the last column is reachable by scrolling the wrapper,
+and the document itself does not overflow horizontally. The HTTP verifier
+checks semantic cells; it cannot certify browser layout from HTML alone.
+
 ## Streamed metadata verification
 
 Use `generateMetadata` for the canonical link, robots directives, and the three

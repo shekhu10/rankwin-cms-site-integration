@@ -184,6 +184,18 @@ RankWin's `html` is sanitized by the CMS renderer. Do not concatenate untrusted
 customer input into it. If rendering `document`, exhaustively handle the
 versioned block union and escape text/attributes.
 
+Tables must remain real `<table>` elements with header `<th scope="col">` and
+body `<td>` cells. Preserve all rows, columns, and inline formatting through
+sanitization. Style cell padding, borders, header contrast, and vertical
+alignment; wrap wide tables in a container that scrolls horizontally within
+the article on mobile, without widening the page or squeezing words into
+single-character columns. Check the actual comparison at desktop and mobile
+widths. See the table CSS in `references/nextjs.md` (also usable by other
+customer renderers). Do not hide raw pipe Markdown with CSS: if authenticated
+delivery already contains a pipe-table paragraph, report an upstream RankWin
+conversion defect and save a corrected revision through the normal publication
+flow. Never mutate an immutable snapshot or regenerate the article to fix layout.
+
 The `featuredImage.url` is the sole public-media exception to bearer
 authorization. It is an immutable HTTPS URL intentionally loadable by browsers
 and crawlers, so fetch it without the delivery key. Never turn a private
@@ -319,3 +331,6 @@ customer URL and its initial HTML are the acceptance boundary.
     customer sitemap reflects every transition without redeployment, and a
     removed detail URL returns 404/410. Report this lifecycle check as untested
     if no disposable article is available; do not delete existing content.
+17. every structured table appears in initial customer HTML with matching
+    headers, rows, and cell text; desktop/mobile browser checks confirm readable
+    cells and horizontal scrolling confined to the table container.

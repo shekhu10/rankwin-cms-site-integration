@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 
 from discover_site import configured_value, parse_site, validate_api_base
+from table_evidence import assert_article_tables
 
 
 MAX_PAGES = 100
@@ -623,6 +624,8 @@ def main() -> int:
             raise AssertionError("article JSON-LD is absent from initial HTML")
         assert_article_body(article["html"], article_source)
         assert_article_layout(article, article_html)
+        assert_article_tables(article["document"], article["html"])
+        assert_article_tables(article["document"], article_source)
         if article.get("snapshotDigest"):
             markers = {"rankwin-publication-id": article["publicationId"],
                        "rankwin-content-version": str(article["contentVersion"]),
