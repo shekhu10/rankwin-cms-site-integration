@@ -206,6 +206,14 @@ delivery already contains a pipe-table paragraph, report an upstream RankWin
 conversion defect and save a corrected revision through the normal publication
 flow. Never mutate an immutable snapshot or regenerate the article to fix layout.
 
+Fenced code examples must remain semantic `<pre><code>` blocks with their
+original indentation, line breaks, blank lines and literal characters. Do not
+apply inline Markdown formatting inside code. Escape raw HTML and allow only
+safe language labels. Compare every canonical code block with both the CMS
+HTML and initial customer HTML; flattened paragraphs do not pass. If conversion
+already damaged an example, rebuild the document from its saved source through
+the normal revision and republish flow, preserving article identity and text.
+
 ### Summaries and images for every new article
 
 Include the visible TL;DR requirement in the customer's publishing setup and
