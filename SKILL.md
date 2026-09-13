@@ -22,7 +22,9 @@ Before editing code, complete this credential and discovery gate:
    `RANKWIN_CMS_API_BASE`, for example
    `https://rankwin.co/api/cms/v1/sites/rwcms_...`.
 3. On the same site card, copy an active **production delivery API key**, or create one. This control
-   is available while the project has an active subscription or live introductory trial. Save
+   is available while the project has active publishing access through an active subscription,
+   a live introductory trial, or an active administrator owner. Administrator-owned projects
+   do not require trial activation. Save
    the key as `RANKWIN_CMS_API_KEY` in the customer development
    environment. Saved keys remain visible in the authorized RankWin setup screen after reload. Older keys stored only as a hash need **Save existing key** once before they can be displayed again. If either variable is absent, stop and ask the customer to set
    it in their local secret store or shell; never ask them to paste the key into
@@ -100,9 +102,11 @@ The script reads both variables from the environment, sends the delivery key
 only in the Authorization header, and prints only non-secret site configuration.
 Expected: `apiVersion: cms.v1` plus the authenticated `site.id`, `site.host`,
 and `site.blogPath`. HTTP 401 means the key is missing, malformed, revoked,
-scoped to another site, or the subscription or trial is inactive. Do not retry a
-401. Ask an authorized RankWin project manager to create a replacement or
-restore the subscription; update the customer server, verify, then revoke the
+scoped to another site, or the project lacks active publishing access. Do not retry a
+401. Check the actual key and entitlement failure; an administrator-owned project
+must not be sent through trial activation. An authorized project manager can replace
+an invalid key or resolve the verified access problem. Update the customer server,
+verify, then revoke the
 old key.
 
 Persist the discovered path as ordinary server configuration if the framework
@@ -168,6 +172,12 @@ For customer-rendered JSON, render:
   and text-only layout when the image is `null`
 - optional `featuredImage` in the index card
 - article body from sanitized `html` or a complete structured-document renderer
+- a visible opening **TL;DR** section with 3–5 substantive takeaways from the
+  article. Preserve it from the delivered document/HTML, immediately after the
+  featured image and before the main discussion. It is article content, not
+  hidden metadata, a duplicate excerpt, or a client-only widget. Keep the
+  takeaways in the article's language and preserve real list semantics. Never
+  hide the summary with a generic `.geo-tldr` utility or require a click to read it.
 - every object in `jsonLd` as `application/ld+json`
 - publication verification meta tags: `rankwin-publication-id` from
   `article.publicationId`, `rankwin-content-version` from `article.contentVersion`,
@@ -195,6 +205,28 @@ customer renderers). Do not hide raw pipe Markdown with CSS: if authenticated
 delivery already contains a pipe-table paragraph, report an upstream RankWin
 conversion defect and save a corrected revision through the normal publication
 flow. Never mutate an immutable snapshot or regenerate the article to fix layout.
+
+### Summaries and images for every new article
+
+Include the visible TL;DR requirement in the customer's publishing setup and
+article template. RankWin's writer must produce it; the customer renderer must
+preserve it. A renderer must not invent a summary or generate an image as a
+side effect of serving a request. For an older article missing a TL;DR, read its
+full body, prepare faithful takeaways, save a new editorial revision and
+republish through the normal publication command. Preserve the original URL,
+article identity and immutable publication history.
+
+Prepare one relevant featured image for every new article before publication.
+Honor the user's chosen image-generation workflow; manual or ChatGPT-created
+images are uploaded through the normal project image flow, with publication
+rights recorded. For existing missing images, upload/select the asset, save a
+new revision and republish. Never patch an immutable publication snapshot.
+The nullable image contract still supports older content: render a clean
+text-only layout until the source is repaired, without broken placeholders.
+
+Verify TL;DR visibility and actual image bytes on every final public article,
+including articles reached through later index pages. Check image cards on the
+index page that contains each article, following real pagination links.
 
 The `featuredImage.url` is the sole public-media exception to bearer
 authorization. It is an immutable HTTPS URL intentionally loadable by browsers
@@ -323,10 +355,6 @@ The complete acceptance list is:
     the index, every article, sitemap, and feed.
 15. `/.well-known/rankwin-site` returns no-store plain text exactly equal to
     `rankwin-site:<site.id>` from authenticated discovery, with no redirect.
-
-Do not declare completion from an upstream API call alone. The canonical
-customer URL and its initial HTML are the acceptance boundary.
-
 16. publish/update/unpublish a disposable article when authorized: verify the
     customer sitemap reflects every transition without redeployment, and a
     removed detail URL returns 404/410. Report this lifecycle check as untested
@@ -334,3 +362,24 @@ customer URL and its initial HTML are the acceptance boundary.
 17. every structured table appears in initial customer HTML with matching
     headers, rows, and cell text; desktop/mobile browser checks confirm readable
     cells and horizontal scrolling confined to the table container.
+
+Do not declare completion from an upstream API call alone. The canonical
+customer URL and its initial HTML are the acceptance boundary.
+
+### Scheduled article batches
+
+Schedule reviewed saved revisions through RankWin's normal publishing command.
+Use an explicit IANA timezone and retain both the intended local time and UTC
+instant in the batch manifest. A future scheduled article must remain absent
+from the public API, archive, sitemap and feed until its publication runs.
+It must return 404 before first publication; a scheduled update to an already
+live article must keep serving its previous active revision until replacement.
+
+For newly scheduled URLs, repeat `--scheduled-url <customer-article-url>` in the
+verifier. This read-only check proves those pages are absent from every crawled
+archive page, sitemap and feed and return 404. Do not pass an already-live URL
+with a scheduled replacement to that check. Verify the saved scheduled snapshot,
+featured image, TL;DR and exact job time separately in the authorized RankWin
+workflow; never temporarily publish a future article merely to test it.
+After the due time, rerun complete live verification without `--scheduled-url`
+for the now-published pages. A scheduling receipt is not evidence of a live page.

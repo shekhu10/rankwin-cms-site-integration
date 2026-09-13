@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 
 from discover_site import configured_value, parse_site, validate_api_base
+from index_evidence import IndexEvidenceParser, image_source_matches, parse_index_evidence
 from table_evidence import assert_article_tables
 
 
@@ -208,7 +209,7 @@ def json_response(url: str, api_key: str) -> tuple[dict, HttpResponse]:
     return payload, response
 
 
-def normalized_public_url(value: str) -> str:
+def normalized_public_url(value: str, *, allow_query: bool = False) -> str:
     parsed = urllib.parse.urlsplit(value)
     local_http = parsed.scheme == "http" and parsed.hostname in {
         "127.0.0.1",
@@ -217,42 +218,113 @@ def normalized_public_url(value: str) -> str:
     }
     if (parsed.scheme != "https" and not local_http) or not parsed.netloc:
         raise AssertionError("public URL must use HTTPS")
-    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+    if parsed.username or parsed.password or (parsed.query and not allow_query) or parsed.fragment:
         raise AssertionError("public URL contains credentials, query, or fragment data")
     path = parsed.path.rstrip("/") or "/"
     return urllib.parse.urlunsplit(
-        (parsed.scheme.lower(), parsed.netloc.lower(), path, "", "")
+        (parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query if allow_query else "", "")
     )
 
 
-def assert_no_redirect(response: HttpResponse, expected_url: str, label: str) -> None:
-    if normalized_public_url(response.final_url) != normalized_public_url(expected_url):
+def assert_no_redirect(response: HttpResponse, expected_url: str, label: str, *, allow_query: bool = False) -> None:
+    if normalized_public_url(response.final_url, allow_query=allow_query) != normalized_public_url(expected_url, allow_query=allow_query):
         raise AssertionError(
             f"{label} redirects away from the RankWin canonical: "
-            f"expected {normalized_public_url(expected_url)}, "
-            f"received {normalized_public_url(response.final_url)}"
+            f"expected {normalized_public_url(expected_url, allow_query=allow_query)}, "
+            f"received {normalized_public_url(response.final_url, allow_query=allow_query)}"
         )
 
 
 def assert_html(
-    response: HttpResponse, expected_url: str, label: str
+    response: HttpResponse, expected_url: str, label: str, *, allow_query: bool = False
 ) -> tuple[str, HtmlEvidenceParser]:
     if response.status != 200:
         raise AssertionError(f"customer {label} returned {response.status}")
     if "text/html" not in (response_header(response, "Content-Type") or ""):
         raise AssertionError(f"customer {label} is not HTML")
-    assert_no_redirect(response, expected_url, f"customer {label}")
+    assert_no_redirect(response, expected_url, f"customer {label}", allow_query=allow_query)
     source = response.body.decode("utf-8", errors="replace")
     parser = HtmlEvidenceParser()
     parser.feed(source)
     canonical_urls = {
-        normalized_public_url(value) for value in parser.canonicals if value
+        normalized_public_url(value, allow_query=allow_query) for value in parser.canonicals if value
     }
-    if normalized_public_url(expected_url) not in canonical_urls:
+    if normalized_public_url(expected_url, allow_query=allow_query) not in canonical_urls:
         raise AssertionError(
             f"customer {label} canonical does not exactly match its final URL"
         )
     return source, parser
+
+
+def collect_index_pages(customer_blog_url: str, *, max_pages: int = MAX_PAGES) -> list[tuple[str, IndexEvidenceParser]]:
+    """Crawl only pagination links present in initial HTML, never guessed paths."""
+    blog = normalized_public_url(customer_blog_url)
+    origin = urllib.parse.urlsplit(blog)
+    pending = [blog]
+    discovered = {blog}
+    pages: list[tuple[str, IndexEvidenceParser]] = []
+    for url in pending:
+        if len(pages) >= max_pages:
+            raise AssertionError("customer index pagination exceeded its safety limit")
+        source, _ = assert_html(request(url, accept="text/html"), url, "index", allow_query=True)
+        evidence = parse_index_evidence(source)
+        pages.append((url, evidence))
+        for href in evidence.pagination_links:
+            if href.startswith("#"):
+                continue
+            target = normalized_public_url(urllib.parse.urljoin(url, href), allow_query=True)
+            parsed = urllib.parse.urlsplit(target)
+            if (parsed.scheme, parsed.netloc) != (origin.scheme, origin.netloc):
+                raise AssertionError("customer index pagination leaves the authenticated origin")
+            if parsed.path != origin.path and not parsed.path.startswith(origin.path.rstrip("/") + "/"):
+                raise AssertionError("customer index pagination leaves the authenticated blog path")
+            # Previous/current/numbered links often repeat; fetch each exact URL once.
+            if target not in discovered:
+                if len(discovered) >= max_pages:
+                    raise AssertionError("customer index pagination exceeded its safety limit")
+                discovered.add(target)
+                pending.append(target)
+    return pages
+
+
+def crawlable_links(page_url: str, links: list[str]) -> set[str]:
+    result: set[str] = set()
+    for link in links:
+        if not link or link.startswith(("#", "mailto:", "tel:", "javascript:")):
+            continue
+        try:
+            result.add(normalized_public_url(urllib.parse.urljoin(page_url, link)))
+        except AssertionError:
+            continue
+    return result
+
+
+def assert_index_articles(articles: list[dict], pages: list[tuple[str, IndexEvidenceParser]]) -> set[str]:
+    expected = {normalized_public_url(article["canonicalUrl"]) for article in articles}
+    links = set().union(*(crawlable_links(url, page.links) for url, page in pages))
+    missing = expected - links
+    if missing:
+        raise AssertionError(f"customer index is missing {len(missing)} crawlable RankWin article link(s)")
+    for article in articles:
+        image = article.get("featuredImage")
+        if not image:
+            continue
+        canonical = normalized_public_url(article["canonicalUrl"])
+        cards = []
+        for url, page in pages:
+            matching = [card for card in page.cards if crawlable_links(url, card.links) & expected == {canonical}]
+            # Prefer actual card boundaries to text-only links inside the card.
+            structural = [card for card in matching if card.tag != "a"]
+            cards.extend(structural or matching)
+        if not cards:
+            raise AssertionError(f"article {article['slug']} has no identifiable index card")
+        for card in cards:
+            matching = [alt for source, alt in card.images if image_source_matches(source, image["url"])]
+            if not matching:
+                raise AssertionError(f"featured image is absent from article {article['slug']}'s own index card")
+            if any(alt != image["alt"] for alt in matching):
+                raise AssertionError(f"featured image alt text does not match RankWin in article {article['slug']}'s index card")
+    return links
 
 
 def assert_summary(summary: object, site: dict[str, str]) -> dict:
@@ -509,21 +581,23 @@ def optional_isolation_checks(api_base: str, api_key: str, article_id: str) -> l
     return skipped
 
 
-def verify_removed_urls(urls: list[str], site: dict, visible_urls: set[str]) -> None:
-    """Read-only verification of URLs the operator has already unpublished."""
+def verify_removed_urls(urls: list[str], site: dict, visible_urls: set[str], *, scheduled: bool = False) -> None:
+    """Verify removed or not-yet-published URLs stay outside public delivery."""
+    label = "scheduled" if scheduled else "removed"
     origin = urllib.parse.urlsplit(site["customerBlogUrl"])
     prefix = origin.path.rstrip("/") + "/"
     for raw in urls:
         url = normalized_public_url(raw)
         parsed = urllib.parse.urlsplit(url)
         if (parsed.scheme, parsed.netloc) != (origin.scheme, origin.netloc) or not parsed.path.startswith(prefix) or parsed.path == prefix:
-            raise AssertionError("removed URL must be an article under the authenticated customer blog")
+            raise AssertionError(f"{label} URL must be an article under the authenticated customer blog")
         if url in visible_urls:
-            raise AssertionError("removed URL is still linked in the sitemap, feed, or index")
+            raise AssertionError(f"{label} URL is still linked in the sitemap, feed, or index")
         result = request(raw, accept="text/html")
-        assert_no_redirect(result, raw, "removed article")
-        if result.status not in (404, 410):
-            raise AssertionError("removed article must return HTTP 404 or 410")
+        assert_no_redirect(result, raw, f"{label} article")
+        if result.status not in ((404,) if scheduled else (404, 410)):
+            expected = "404" if scheduled else "404 or 410"
+            raise AssertionError(f"{label} article must return HTTP {expected}")
 
 
 def main() -> int:
@@ -531,6 +605,7 @@ def main() -> int:
     parser.add_argument("--api-base", help="defaults to RANKWIN_CMS_API_BASE")
     parser.add_argument("--customer-blog-url")
     parser.add_argument("--removed-url", action="append", default=[], help="already unpublished customer URL; repeat for multiple URLs")
+    parser.add_argument("--scheduled-url", action="append", default=[], help="new article scheduled for the future, never previously public; repeat for multiple URLs")
     args = parser.parse_args()
     api_base = validate_api_base(
         configured_value(args.api_base, "RANKWIN_CMS_API_BASE")
@@ -544,7 +619,7 @@ def main() -> int:
     ).status != 401:
         raise AssertionError("malformed/invalid key did not return 401")
 
-    site, articles = collect_articles(api_base, api_key, allow_empty=bool(args.removed_url))
+    site, articles = collect_articles(api_base, api_key, allow_empty=bool(args.removed_url or args.scheduled_url))
     expected_blog_url = normalized_public_url(site["customerBlogUrl"])
     customer_blog_url = normalized_public_url(
         args.customer_blog_url or site["customerBlogUrl"]
@@ -573,10 +648,8 @@ def main() -> int:
             "customer RankWin site marker does not match authenticated site.id"
         )
 
-    blog_response = request(customer_blog_url, accept="text/html")
-    index_source, index_html = assert_html(
-        blog_response, customer_blog_url, "index"
-    )
+    index_pages = collect_index_pages(customer_blog_url)
+    index_links = assert_index_articles(articles, index_pages)
     expected_canonicals = {
         normalized_public_url(article["canonicalUrl"]) for article in articles
     }
@@ -643,10 +716,7 @@ def main() -> int:
                 raise AssertionError("featured image response is not an image")
             if "public" not in (response_header(media, "Cache-Control") or ""):
                 raise AssertionError("featured image is missing public caching")
-            decoded_index = urllib.parse.unquote(index_source)
             decoded_article = urllib.parse.unquote(article_source)
-            if featured_image["url"] not in decoded_index:
-                raise AssertionError("featured image is absent from initial index HTML")
             if featured_image["url"] not in decoded_article:
                 raise AssertionError("featured image is absent from initial article HTML")
             matching_images = [
@@ -656,21 +726,6 @@ def main() -> int:
             ]
             if matching_images and featured_image["alt"] not in matching_images:
                 raise AssertionError("featured image alt text does not match RankWin")
-
-    index_links: set[str] = set()
-    for link in index_html.links:
-        if not link or link.startswith(("#", "mailto:", "tel:", "javascript:")):
-            continue
-        joined = urllib.parse.urljoin(customer_blog_url + "/", link)
-        parsed_link = urllib.parse.urlsplit(joined)
-        if parsed_link.query or parsed_link.fragment:
-            continue
-        try:
-            index_links.add(normalized_public_url(joined))
-        except AssertionError:
-            continue
-    if expected_canonicals and not expected_canonicals.intersection(index_links):
-        raise AssertionError("customer index has no crawlable RankWin article links")
 
     sitemap_url = f"{customer_blog_url.rstrip('/')}/sitemap.xml"
     sitemap_response = request(sitemap_url, accept="application/xml")
@@ -695,6 +750,9 @@ def main() -> int:
     verify_sitemap_registration(customer_origin, sitemap_url, expected_canonicals)
 
     verify_removed_urls(args.removed_url, site, sitemap_urls | feed_urls | index_links)
+    verify_removed_urls(args.scheduled_url, site, sitemap_urls | feed_urls | index_links, scheduled=True)
+    if args.scheduled_url:
+        print(f"Scheduled visibility verified: {len(args.scheduled_url)} new future article(s) remain private")
     skipped = optional_isolation_checks(api_base, api_key, articles[0]["id"]) if articles else [
         "article content, ETag, media and cross-site isolation (no remaining published article)"
     ]
@@ -710,7 +768,7 @@ def main() -> int:
 
     print(
         f"RankWin CMS deterministic integration verified: {len(articles)} article(s), "
-        "canonical HTML, sitemap, feed and registration; see unexercised controls below"
+        f"{len(index_pages)} index page(s), canonical HTML, sitemap, feed and registration; see unexercised controls below"
     )
     if skipped:
         print("External/operator controls not exercised by this HTTP verifier:")

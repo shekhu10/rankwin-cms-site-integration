@@ -17,6 +17,15 @@ server/worker secret store. On every upstream request set a new
 `Authorization: Bearer <configured-key>` header. Do not forward the visitor's
 Authorization, Cookie, query-supplied upstream URL, or arbitrary headers.
 
+Disable automatic redirects on authenticated fetches so a redirect cannot
+forward the delivery credential. In Cloudflare Workers, use `redirect: "manual"`
+and reject 3xx responses except `304 Not Modified`; the Workers runtime can
+reject `redirect: "error"` before sending the request. Keep `cache: "no-store"`
+for live delivery and do not copy Next.js-only fetch options into an edge
+adapter. Exercise the adapter in its actual runtime, then verify the deployed
+marker and publication lifecycle; a successful build or deployment plan does
+not establish that the worker is serving the new code.
+
 Order sitemap/feed before the slug catch-all. For root mode, preserve every
 existing product route before `/:slug` and use a non-conflicting sitemap path.
 Build upstream URLs from trusted configuration, percent-encode the slug once,
