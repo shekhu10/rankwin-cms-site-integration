@@ -322,6 +322,7 @@ Run repository and deployment checks, then run from this skill directory:
 
 ```bash
 python3 scripts/verify_integration.py \
+  --workers 4 \
   --api-base "$RANKWIN_CMS_API_BASE"
 ```
 
@@ -332,6 +333,8 @@ exact URL. It follows every list cursor and checks every published article,
 stable document node, canonical/final URL, initial HTML response, ETag, optional
 featured image, sitemap, feed, and sitemap registration. Repeat fetch → inspect
 → fix → deploy → fetch until all deterministic checks pass.
+Use `--workers 1` for sequential requests or up to 8 for bounded article
+parallelism (default 1); this changes throughput without skipping checks.
 
 For a live two-site isolation exercise, set a second entitled site's
 `RANKWIN_CMS_OTHER_API_BASE` and `RANKWIN_CMS_OTHER_API_KEY`; the verifier proves

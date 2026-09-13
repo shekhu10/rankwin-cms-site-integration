@@ -12,6 +12,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from html.parser import HTMLParser
 
@@ -601,12 +602,103 @@ def verify_removed_urls(urls: list[str], site: dict, visible_urls: set[str], *, 
             raise AssertionError(f"{label} article must return HTTP {expected}")
 
 
+def verify_article(summary: dict, api_base: str, api_key: str) -> None:
+    article_id = urllib.parse.quote(summary["id"], safe="")
+    detail, detail_response = json_response(
+        f"{api_base}/articles/by-id/{article_id}", api_key
+    )
+    article = detail.get("article")
+    if not isinstance(article, dict):
+        raise AssertionError("detail response is missing article")
+    for field in ("documentId", "html", "markdown", "seo", "jsonLd"):
+        if not article.get(field):
+            raise AssertionError(f"detail missing {field}")
+    if article.get("id") != summary["id"]:
+        raise AssertionError("ID detail mismatch")
+    if article.get("featuredImage") != summary.get("featuredImage"):
+        raise AssertionError("list/detail featuredImage mismatch")
+    document = article.get("document")
+    if not isinstance(document, dict) or not document.get("blocks"):
+        raise AssertionError("document has no blocks")
+    node_ids = collect_document_node_ids(document)
+    if not node_ids or len(node_ids) != len(set(node_ids)):
+        raise AssertionError("document node IDs are missing or not unique")
+
+    etag = response_header(detail_response, "ETag")
+    if not etag:
+        raise AssertionError("detail has no ETag")
+    if request(
+        f"{api_base}/articles/by-id/{article_id}",
+        api_key=api_key,
+        etag=etag,
+    ).status != 304:
+        raise AssertionError("conditional detail did not return 304")
+
+    article_url = normalized_public_url(summary["canonicalUrl"])
+    article_response = request(article_url, accept="text/html")
+    article_source, article_html = assert_html(
+        article_response, article_url, f"article {summary['slug']}"
+    )
+    if visible_text(article["title"]) not in visible_text(article_source):
+        raise AssertionError("article title is absent from initial HTML")
+    if article_html.json_ld_count == 0:
+        raise AssertionError("article JSON-LD is absent from initial HTML")
+    assert_article_body(article["html"], article_source)
+    assert_article_layout(article, article_html)
+    assert_article_tables(article["document"], article["html"])
+    assert_article_tables(article["document"], article_source)
+    assert_article_code(article["document"], article["html"])
+    assert_article_code(article["document"], article_source)
+    if article.get("snapshotDigest"):
+        markers = {"rankwin-publication-id": article["publicationId"],
+                   "rankwin-content-version": str(article["contentVersion"]),
+                   "rankwin-snapshot-digest": article["snapshotDigest"]}
+        for name, expected in markers.items():
+            if article_html.meta.get(name) != expected:
+                raise AssertionError(f"publication marker {name} is missing or stale")
+
+    featured_image = summary.get("featuredImage")
+    if featured_image:
+        media = request(featured_image["url"], accept="image/*")
+        if media.status != 200:
+            raise AssertionError("public featured image is unavailable")
+        if not (response_header(media, "Content-Type") or "").startswith("image/"):
+            raise AssertionError("featured image response is not an image")
+        if "public" not in (response_header(media, "Cache-Control") or ""):
+            raise AssertionError("featured image is missing public caching")
+        decoded_article = urllib.parse.unquote(article_source)
+        if featured_image["url"] not in decoded_article:
+            raise AssertionError("featured image is absent from initial article HTML")
+        matching_images = [
+            alt
+            for source, alt in article_html.images
+            if featured_image["url"] in urllib.parse.unquote(source)
+        ]
+        if matching_images and featured_image["alt"] not in matching_images:
+            raise AssertionError("featured image alt text does not match RankWin")
+
+
+def verify_articles(articles: list[dict], api_base: str, api_key: str, workers: int = 1) -> None:
+    if not 1 <= workers <= 8:
+        raise ValueError("article workers must be between 1 and 8")
+    if workers == 1:
+        for summary in articles:
+            verify_article(summary, api_base, api_key)
+        return
+    # Each article retains its dependent request sequence; only separate
+    # articles run together. Iterating results propagates every failure.
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for _ in executor.map(lambda summary: verify_article(summary, api_base, api_key), articles):
+            pass
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--api-base", help="defaults to RANKWIN_CMS_API_BASE")
     parser.add_argument("--customer-blog-url")
     parser.add_argument("--removed-url", action="append", default=[], help="already unpublished customer URL; repeat for multiple URLs")
     parser.add_argument("--scheduled-url", action="append", default=[], help="new article scheduled for the future, never previously public; repeat for multiple URLs")
+    parser.add_argument("--workers", type=int, choices=range(1, 9), default=1, help="concurrent article checks (1–8, default 1)")
     args = parser.parse_args()
     api_base = validate_api_base(
         configured_value(args.api_base, "RANKWIN_CMS_API_BASE")
@@ -655,80 +747,7 @@ def main() -> int:
         normalized_public_url(article["canonicalUrl"]) for article in articles
     }
 
-    for summary in articles:
-        article_id = urllib.parse.quote(summary["id"], safe="")
-        detail, detail_response = json_response(
-            f"{api_base}/articles/by-id/{article_id}", api_key
-        )
-        article = detail.get("article")
-        if not isinstance(article, dict):
-            raise AssertionError("detail response is missing article")
-        for field in ("documentId", "html", "markdown", "seo", "jsonLd"):
-            if not article.get(field):
-                raise AssertionError(f"detail missing {field}")
-        if article.get("id") != summary["id"]:
-            raise AssertionError("ID detail mismatch")
-        if article.get("featuredImage") != summary.get("featuredImage"):
-            raise AssertionError("list/detail featuredImage mismatch")
-        document = article.get("document")
-        if not isinstance(document, dict) or not document.get("blocks"):
-            raise AssertionError("document has no blocks")
-        node_ids = collect_document_node_ids(document)
-        if not node_ids or len(node_ids) != len(set(node_ids)):
-            raise AssertionError("document node IDs are missing or not unique")
-
-        etag = response_header(detail_response, "ETag")
-        if not etag:
-            raise AssertionError("detail has no ETag")
-        if request(
-            f"{api_base}/articles/by-id/{article_id}",
-            api_key=api_key,
-            etag=etag,
-        ).status != 304:
-            raise AssertionError("conditional detail did not return 304")
-
-        article_url = normalized_public_url(summary["canonicalUrl"])
-        article_response = request(article_url, accept="text/html")
-        article_source, article_html = assert_html(
-            article_response, article_url, f"article {summary['slug']}"
-        )
-        if visible_text(article["title"]) not in visible_text(article_source):
-            raise AssertionError("article title is absent from initial HTML")
-        if article_html.json_ld_count == 0:
-            raise AssertionError("article JSON-LD is absent from initial HTML")
-        assert_article_body(article["html"], article_source)
-        assert_article_layout(article, article_html)
-        assert_article_tables(article["document"], article["html"])
-        assert_article_tables(article["document"], article_source)
-        assert_article_code(article["document"], article["html"])
-        assert_article_code(article["document"], article_source)
-        if article.get("snapshotDigest"):
-            markers = {"rankwin-publication-id": article["publicationId"],
-                       "rankwin-content-version": str(article["contentVersion"]),
-                       "rankwin-snapshot-digest": article["snapshotDigest"]}
-            for name, expected in markers.items():
-                if article_html.meta.get(name) != expected:
-                    raise AssertionError(f"publication marker {name} is missing or stale")
-
-        featured_image = summary.get("featuredImage")
-        if featured_image:
-            media = request(featured_image["url"], accept="image/*")
-            if media.status != 200:
-                raise AssertionError("public featured image is unavailable")
-            if not (response_header(media, "Content-Type") or "").startswith("image/"):
-                raise AssertionError("featured image response is not an image")
-            if "public" not in (response_header(media, "Cache-Control") or ""):
-                raise AssertionError("featured image is missing public caching")
-            decoded_article = urllib.parse.unquote(article_source)
-            if featured_image["url"] not in decoded_article:
-                raise AssertionError("featured image is absent from initial article HTML")
-            matching_images = [
-                alt
-                for source, alt in article_html.images
-                if featured_image["url"] in urllib.parse.unquote(source)
-            ]
-            if matching_images and featured_image["alt"] not in matching_images:
-                raise AssertionError("featured image alt text does not match RankWin")
+    verify_articles(articles, api_base, api_key, args.workers)
 
     sitemap_url = f"{customer_blog_url.rstrip('/')}/sitemap.xml"
     sitemap_response = request(sitemap_url, accept="application/xml")
