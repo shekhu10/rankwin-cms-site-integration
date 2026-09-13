@@ -224,6 +224,22 @@ full body, prepare faithful takeaways, save a new editorial revision and
 republish through the normal publication command. Preserve the original URL,
 article identity and immutable publication history.
 
+When migrating an existing local blog into RankWin CMS, inventory every public
+canonical URL before changing its delivery source. Preserve the original
+publication date, language, meaningful heading anchors, code, tables and inline
+media in the reviewed CMS revision. Backfill missing summaries from the full
+body; factual corrections belong in a new audited editorial revision. Do not
+replace original publication dates with the migration date or create a competing
+scheduled URL for an article that is already public.
+
+Verify each migrated article through the CMS and the public website before
+retiring its local delivery path. Then permanently retire local fallback for
+those article identities across detail routes, indexes, raw content exports,
+sitemaps, feeds and generated discovery files. Preserve source files as an
+archive if needed, but do not let deleted CMS articles or a provider outage
+resurrect them. A partial migration needs an explicit remaining-local inventory;
+an empty CMS response is not permission to restore retired content.
+
 Prepare one relevant featured image for every new article before publication.
 Honor the user's chosen image-generation workflow; manual or ChatGPT-created
 images are uploaded through the normal project image flow, with publication
