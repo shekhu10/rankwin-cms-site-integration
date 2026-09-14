@@ -67,8 +67,12 @@ teaching the adapter to emit two canonical hosts.
 
 ## Customer renderer mode
 
-Fetch list in a Server Component. Use summary `id` for detail and summary
-`slug` for `generateStaticParams`/routing:
+Fetch the index list in a Server Component. For a detail route, use a fresh
+authenticated slug lookup to resolve its stable ID, followed by the by-ID read
+below. Do not paginate the entire index to resolve a slug. Validate the site,
+ID, slug and publication/version/digest agreement before rendering; permit one
+fresh retry if publication changed between reads. Deduplicate metadata and body
+reads within the request, without introducing a cross-request content cache.
 
 ```ts
 async function articleById(id: string) {
@@ -83,13 +87,13 @@ async function articleById(id: string) {
 
 `generateMetadata` must return title, description, canonical, and Open Graph
 data. Initial server HTML must contain the body and JSON-LD. Call `notFound()`
-only for authenticated 404. Use an error boundary or known-good cached page for
-401/429/5xx; never return an empty 200.
+only for authenticated 404. Use an error boundary for 401/429/5xx; never return
+an empty 200. A tested stale-content policy may cover transient 429/5xx failures,
+but must not serve revoked or removed content after 401/404.
 
-For ISR, let an upstream failure throw so Next retains the last successfully
-generated page. Do not catch an authenticated list failure and replace it with
-an empty array: that converts an outage or revoked key into a cached blog that
-silently removes every RankWin article.
+Use no-store by default. ISR requires tested publish/update/delete and key
+revocation invalidation; retaining a prior page on every error is insufficient.
+Do not catch an authenticated list failure and replace it with an empty array.
 
 When `featuredImage` is non-null, allowlist the exact RankWin production
 hostname and CMS media path in `images.remotePatterns`, render its `url` in both

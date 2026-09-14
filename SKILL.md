@@ -160,6 +160,13 @@ Do not use a slug as a database key. Two sites may intentionally use the same
 slug. Never attempt an ID lookup under another site API base or cache an article
 without the site identity.
 
+On a detail request, resolve the incoming slug with one fresh authenticated
+slug read, then retrieve the authoritative article by its stable ID. Do not
+walk every list page to find one article. Check that both responses agree on
+site, ID, slug, publication ID, content version and snapshot digest. A concurrent
+publication can require one bounded fresh retry; never render mismatched data.
+Share this resolved article between metadata and body within the request.
+
 ### 5. Render the complete contract
 
 For customer-rendered JSON, render:
@@ -284,11 +291,16 @@ image bytes without authentication as well as rendered image tags on both pages.
   safe `Vary` values. Do not copy the upstream `private/no-store` policy onto a
   public customer page if the application has an explicit authenticated
   regeneration cache.
-- Use bounded timeouts and stale-if-error behavior where supported.
+- Use bounded timeouts. Stale-if-error requires an explicit, tested cache
+  policy; never use stale content to hide a 401 or an unpublished/deleted 404.
 - Treat 401 as terminal configuration/subscription failure, 404 as
   missing/unpublished, 429 as retryable with jitter, and 5xx/network failures
   as retryable. Never replace a valid cached page with an empty 200.
 - Follow `nextCursor` verbatim until null. Do not construct or decode cursors.
+
+For performance audits or reader-load telemetry, read
+`references/performance.md`. Keep the full article in initial HTML; viewport
+optimizations must not make article text depend on scrolling or JavaScript.
 
 ### 7. Integrate sitemap, feed, and analytics
 
