@@ -84,6 +84,15 @@ after an article is removed. Test readiness in RankWin. RankWin-hosted CMS sites
 serve the proof through the hosted resolver; pull adapters must serve it on the
 customer origin. Do not claim IndexNow is ready until the public probe passes.
 
+A successful local proof probe does not prove that the engine has validated
+the key. If IndexNow still returns 403, record the refusal and inspect the
+exact host and ownership route. Do not repeatedly resubmit every article or
+erase the failed attempts. When a replacement CMS key is necessary, preserve
+any legacy integration's key, verify the replacement with the provider, then
+use an audited retry that retains the previous error and attempt count. Treat
+202 as accepted with ownership validation pending; a later 200 confirms the
+notification succeeded. Neither response establishes search indexing.
+
 IndexNow supports removed URLs returning 404/410. Bing's ordinary SubmitUrl API
 is for live URLs; do not use it as a deletion API. Bing connection alone enables
 sitemap resubmission on removal; direct change notices also require IndexNow.
